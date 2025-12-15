@@ -1,0 +1,10 @@
+File,CER_Score,Text_Length
+/home/cuongnh/PycharmProjects/TTTS_01/TTS-01/data/processed/ocr_clean.txt,0.0017619829774525907,234395
+
+
+
+
+
+file, path
+gr_Truth, /home/cuongnh/PycharmProjects/TTTS_01/TTS-01/data/gr_truth
+predict, /home/cuongnh/PycharmProjects/TTTS_01/TTS-01/data/predict

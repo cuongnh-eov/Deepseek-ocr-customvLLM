@@ -1,0 +1,86 @@
+# =========================
+
+# Python cache / bytecode
+
+# =========================
+
+**pycache**/
+**/**pycache**/
+*.py[cod]
+*$py.class
+
+# =========================
+
+# Virtual env
+
+# =========================
+
+.venv/
+venv/
+env/
+ENV/
+
+# =========================
+
+# Jupyter / IPython
+
+# =========================
+
+.ipynb_checkpoints/
+.profile_default/
+
+# =========================
+
+# Build / dist
+
+# =========================
+
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# =========================
+
+# Logs / temp
+
+# =========================
+
+*.log
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# =========================
+
+# IDEs
+
+# =========================
+
+.vscode/
+.idea/
+*.swp
+
+# =========================
+
+# Your project specific (ignore whole folders)
+
+# =========================
+
+data/
+res/
+
+# nếu bạn cũng muốn bỏ luôn output xử lý thì mở comment dòng dưới:
+
+# process/
+
+# =========================
+
+# Secrets / local configs (tuỳ bạn)
+
+# =========================
+
+.env
+*.key
+*.pem

@@ -1,0 +1,36 @@
+- TTS-01/
+    - __init__.py
+    - requirements.txt
+    - corpus_manifest.csv
+    - deepseek_ocr.py
+    - dockerfile
+    - imports.csv
+    - xoayy.py
+    - deepencoder/
+        - __init__.py
+        - build_linear.py
+        - clip_sdpa.py
+        - sam_vary_sdpa.py
+    - data/
+        - raw/
+        - processed/
+    - configs/
+        - __init__.py
+        - config.py
+    - process/
+        - ngram_norepeat.py
+        - __init__.py
+        - image_process.py
+    - Scripts/
+        - benchmark.py
+        - eval_CER.py
+    - app/
+        - file_handler.py
+        - model_runner.py
+        - __init__.py
+        - main.py
+        - utils.py
+        - postprocess_md.py
+        - processor.py
+        - model_init.py
+      
