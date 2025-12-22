@@ -11,5 +11,5 @@ export UPLOAD_PATH="./uploads"
 # Tạo thư mục upload nếu chưa có
 mkdir -p ./uploads
 
-echo "🚀 Starting FastAPI on port 8000..."
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+echo "🚀 Starting FastAPI on port 8001..."
+uvicorn app.main:app --host 0.0.0.0 --port 8001

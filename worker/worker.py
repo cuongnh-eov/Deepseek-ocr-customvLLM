@@ -40,10 +40,11 @@ from app.processor import preprocess_batch, generate_ocr
 from app.model_init import llm, sampling_params
 from app.postprocess_md import process_ocr_output
 from app.postprocess_json import process_ocr_to_blocks
+from app.postprocess_md import upload_to_minio
 
-RABBIT_URL = os.getenv("RABBIT_URL", "amqp://guest:guest@localhost:5672/")
-QUEUE_NAME = os.getenv("QUEUE_NAME", "ocr_jobs")
-OUTPUT_PATH = os.getenv("OUTPUT_PATH", "./outputs")
+from configs.config import RABBIT_URL, QUEUE_NAME, OUTPUT_PATH
+
+from app.postprocess_md import upload_to_minio
 
 
 def get_gpu_info() -> Tuple[Optional[str], Optional[int]]:
@@ -127,7 +128,7 @@ def update_job(db: Session, job: OCRJob, **kwargs):
 
 def process_one_job(job_id: str):
     """
-    Xử lý 1 job theo job_id.
+    Xử lý 1 job theo job_id: PDF -> Images -> AI -> Crop -> MD -> Cleanup
     """
     db = SessionLocal()
     job = db.get(OCRJob, job_id)
@@ -136,57 +137,64 @@ def process_one_job(job_id: str):
         db.close()
         return
 
-    # Lấy thông tin GPU và ghi ngay khi RUNNING
     gpu_name, gpu_total_mb = get_gpu_info()
 
     try:
+        # 1. Update trạng thái đang chạy
+        # Lấy file size để ghi metrics
+        file_size = 0
+        if os.path.exists(job.input_path):
+            file_size = round(os.path.getsize(job.input_path) / (1024 * 1024), 2)
+
         update_job(
             db, job,
             status=JobStatus.RUNNING,
             error=None,
             gpu_name=gpu_name,
             gpu_total_mb=gpu_total_mb,
+            file_size_mb=file_size
         )
 
-        # Reset peak VRAM để đo riêng cho job này
         reset_gpu_peak()
-
-        # ===== Stage timing =====
         t0 = time.time()
 
-        # 1) Tạo thư mục output riêng theo job_id
-        output_dir = f"{OUTPUT_PATH}/{job_id}"
+        # 2. Tạo thư mục output
+        output_dir = os.path.join(OUTPUT_PATH, job_id)
         os.makedirs(output_dir, exist_ok=True)
 
-        # 2) PDF -> images
+        # 3. PDF -> Images
         t_pdf2img0 = time.time()
         images = pdf_to_images_high_quality(job.input_path)
         t_pdf2img = time.time() - t_pdf2img0
         total_pages = len(images)
 
-        # 3) preprocess
+        # 4. AI Inference (Preprocess + Model)
         t_pre0 = time.time()
         batch_inputs = preprocess_batch(images, PROMPT)
         t_preprocess = time.time() - t_pre0
 
-        # 4) infer (vLLM)
         t_inf0 = time.time()
         outputs = generate_ocr(llm, batch_inputs, sampling_params)
         t_infer = time.time() - t_inf0
 
-        # 5) postprocess (markdown + blocks json)
+        # 5. Hậu xử lý (Post-process)
         t_post0 = time.time()
-
-        # 5.1) Markdown
-        # markdown_text, _, _ = process_ocr_output(outputs, images)
+        
+        # --- QUAN TRỌNG ---
+        # Hàm này sẽ tự CROP ảnh nhỏ và TỰ LƯU file Markdown vào output_dir
         markdown_text, _, _ = process_ocr_output(outputs, images, out_path=output_dir)
-        markdown_path = f"{output_dir}/{Path(job.filename).stem}.md"
+        
+        # Xác định đường dẫn file MD (tên file gốc + .md)
+      # worker.py
+        markdown_path = os.path.join(output_dir, f"{job_id}.md")
         with open(markdown_path, "w", encoding="utf-8") as f:
             f.write(markdown_text)
 
-        # 5.2) JSON blocks theo page
+        
+        # 5.2) Tạo JSON blocks cấu trúc
         content_pages = []
         for page_num, output in enumerate(outputs):
+            # Sử dụng nội dung đã sạch từ hàm extract_content
             cleaned = extract_content(output.outputs[0].text, job_id)
             blocks = process_ocr_to_blocks(cleaned)
             content_pages.append({"page_number": page_num + 1, "blocks": blocks})
@@ -202,19 +210,26 @@ def process_one_job(job_id: str):
             }
         }
 
-        json_path = f"{output_dir}/{Path(job.filename).stem}.json"
+        json_path = os.path.join(output_dir, f"{job_id}.json")
         with open(json_path, "w", encoding="utf-8") as f:
             pyjson.dump(response_data, f, ensure_ascii=False, indent=2)
 
+        # BƯỚC MỚI: ĐẨY LÊN MINIO TỪ WORKER
+        # =======================================================
+        print(f"🚀 Đang đẩy kết quả Job {job_id} lên MinIO...")
+        try:
+            # upload_dir chính là output_dir chứa cả md, json và images
+            upload_to_minio(output_dir, job_id)
+            print(f"✅ Đã tải lên MinIO thành công.")
+        except Exception as minio_err:
+            print(f"⚠️ Lỗi Upload MinIO nhưng vẫn tiếp tục: {minio_err}")
+
+        # =======================================================
         t_postprocess = time.time() - t_post0
-
-        # Tổng thời gian job
         processing_time = time.time() - t0
-
-        # VRAM peak
         vram_peak_mb, vram_reserved_peak_mb = read_gpu_peak_mb()
 
-        # Update DB: SUCCESS + metrics + paths
+        # 6. Cập nhật DB thành công
         update_job(
             db, job,
             status=JobStatus.SUCCESS,
@@ -222,22 +237,24 @@ def process_one_job(job_id: str):
             processing_time=round(processing_time, 3),
             vram_peak_mb=vram_peak_mb,
             vram_reserved_peak_mb=vram_reserved_peak_mb,
-
-            # stage timing (cần DB có cột tương ứng; nếu chưa có thì helper sẽ bỏ qua)
             t_pdf2img=round(t_pdf2img, 3),
             t_preprocess=round(t_preprocess, 3),
             t_infer=round(t_infer, 3),
             t_postprocess=round(t_postprocess, 3),
-
             output_dir=output_dir,
             markdown_path=markdown_path,
             json_path=json_path,
         )
 
-    except Exception as e:
-        # Khi lỗi vẫn cố đọc peak VRAM để debug OOM
-        vram_peak_mb, vram_reserved_peak_mb = read_gpu_peak_mb()
+        # --- DỌN DẸP FILE TẠM ---
+        # Sau khi SUCCESS, xóa file PDF gốc trong uploads để tiết kiệm ổ cứng
+        if os.path.exists(job.input_path):
+            os.remove(job.input_path)
+            print(f"✅ Đã dọn dẹp file PDF gốc: {job.input_path}")
 
+    except Exception as e:
+        print(f"❌ Lỗi xử lý Job {job_id}: {str(e)}")
+        vram_peak_mb, vram_reserved_peak_mb = read_gpu_peak_mb()
         update_job(
             db, job,
             status=JobStatus.FAILED,
@@ -247,7 +264,6 @@ def process_one_job(job_id: str):
         )
     finally:
         db.close()
-
 
 def main():
     """

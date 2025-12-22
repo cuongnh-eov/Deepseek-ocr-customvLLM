@@ -20,7 +20,7 @@ def run_ocr_pipeline(input_pdf, output_dir, prompt):
     # Step 1: Prepare
     print('[STEP 1] Preparing output directories...')
     prepare_output_dirs(output_dir)
-    output_paths = get_output_paths(input_pdf, output_dir)
+    output_paths = get_output_paths(input_pdf, output_dir)  
     
     # Step 2: Convert PDF to images
     print('[STEP 2] Converting PDF to images...')
@@ -39,7 +39,7 @@ def run_ocr_pipeline(input_pdf, output_dir, prompt):
     
     # Step 5: Post-process
     print('[STEP 5] Post-processing results...')
-    contents, contents_det, draw_images = process_ocr_output(outputs, images)
+    contents, contents_det, draw_images = process_ocr_output(outputs, images, out_path=output_dir)
     print('  ✓ Post-processed outputs')
     
     # Step 6: Save
@@ -50,6 +50,6 @@ def run_ocr_pipeline(input_pdf, output_dir, prompt):
     print('[PIPELINE] ✅ OCR processing completed!')
     
     return output_paths
-
+ 
 if __name__ == "__main__":
     run_ocr_pipeline(INPUT_PATH, OUTPUT_PATH, PROMPT)

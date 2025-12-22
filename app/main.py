@@ -1,27 +1,11 @@
-"""
-app/main.py (FastAPI)
-=====================
-Vai trò: "điều phối" (orchestration), KHÔNG chạy OCR nặng.
-- POST /jobs:
-    Nhận file PDF -> lưu vào uploads/ -> tạo job_id -> ghi DB -> push RabbitMQ -> trả job_id ngay.
-- GET /jobs/{job_id}:
-    Client poll để xem trạng thái và metrics (VRAM, timing, số trang... do Worker ghi vào DB).
-- GET /jobs/{job_id}/result/markdown:
-    Khi SUCCESS -> tải file .md
-- GET /jobs/{job_id}/result/json:
-    Khi SUCCESS -> tải file .json
-
-Tại sao API không ghi VRAM?
-- Vì VRAM tăng khi Worker chạy model, không phải khi API nhận file.
-- API chỉ đọc metrics từ DB do Worker đã cập nhật.
-"""
-
 import os
 import uuid
-from datetime import datetime
+import shutil
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import List
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, APIRouter
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -29,157 +13,169 @@ from app.db import get_db, Base, engine
 from app.models import OCRJob, JobStatus
 from app.queue import publish_job
 
-# Đường dẫn mặc định (bạn có thể set qua ENV)
+# --- Cấu hình đường dẫn ---
 UPLOAD_PATH = os.getenv("UPLOAD_PATH", "./uploads")
 OUTPUT_PATH = os.getenv("OUTPUT_PATH", "./outputs")
-
-# Giới hạn dung lượng upload (tuỳ bạn, đơn vị MB)
 MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "200"))
 
 os.makedirs(UPLOAD_PATH, exist_ok=True)
 os.makedirs(OUTPUT_PATH, exist_ok=True)
-Base.metadata.create_all(bind=engine)
-app = FastAPI(title="Async OCR Service", version="2.1.0")
 
+# Khởi tạo Database
+Base.metadata.create_all(bind=engine)
+
+app = FastAPI(
+    title="EOV OCR Professional Service",
+    description="Hệ thống OCR xử lý bất đồng bộ chuẩn REST API",
+    version="1.0.0"
+)
+
+# Tạo Router với prefix theo yêu cầu của sếp
+ocr_router = APIRouter(prefix="/api/v1/ocr", tags=["OCR Documents"])
 
 def _safe_filename(name: str) -> str:
-    """
-    Tránh các ký tự path traversal; giữ đơn giản.
-    """
     return Path(name).name
 
+# --- ENDPOINTS ---
 
-@app.post("/jobs")
-async def submit_job(file: UploadFile = File(...), db: Session = Depends(get_db)):
+@ocr_router.post("/upload")
+async def upload_document(file: UploadFile = File(...), db: Session = Depends(get_db)):
     """
-    Nhận PDF, lưu file, tạo job và đẩy sang queue.
-    Trả job_id ngay, không chờ OCR.
+    POST /api/v1/ocr/upload
+    Tải lên file PDF và đẩy vào hàng chờ xử lý.
     """
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Chỉ hỗ trợ định dạng PDF.")
 
-    # 1) Validate loại file
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF is supported")
-
-    # 2) Validate kích thước (cách đơn giản: đọc toàn bộ vào memory -> check)
-    #    Nếu file rất lớn, bạn có thể chuyển sang stream chunk.
+    # Đọc file và kiểm tra dung lượng
     data = await file.read()
-    size_mb = len(data) / (1024 * 1024)
+    size_mb = round(len(data) / (1024 * 1024), 2)
     if size_mb > MAX_UPLOAD_MB:
-        raise HTTPException(status_code=413, detail=f"File too large (> {MAX_UPLOAD_MB} MB)")
+        raise HTTPException(status_code=413, detail=f"File quá lớn ({size_mb}MB). Giới hạn: {MAX_UPLOAD_MB}MB")
 
-    # 3) Tạo job_id
     job_id = uuid.uuid4().hex
-
-    # 4) Lưu file vào uploads/
     clean_name = _safe_filename(file.filename)
-    saved_pdf = f"{UPLOAD_PATH}/{job_id}_{clean_name}"
-    with open(saved_pdf, "wb") as f:
+    
+    # Lưu file PDF gốc vào thư mục uploads
+    saved_pdf_path = os.path.join(UPLOAD_PATH, f"{job_id}_{clean_name}")
+    with open(saved_pdf_path, "wb") as f:
         f.write(data)
 
-    # 5) Ghi DB trạng thái QUEUED
-    job = OCRJob(
+    # Tạo bản ghi Job mới
+    new_job = OCRJob(
         job_id=job_id,
         filename=clean_name,
-        input_path=saved_pdf,
+        input_path=saved_pdf_path,
+        file_size_mb=size_mb,
         status=JobStatus.QUEUED,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
-        # bạn có thể lưu size_mb vào DB nếu đã tạo cột; nếu chưa thì bỏ
+        created_at=datetime.now(timezone.utc)
     )
-    db.add(job)
+    db.add(new_job)
     db.commit()
 
-    # 6) Push message sang RabbitMQ (Worker sẽ xử lý)
+    # Đẩy tin nhắn sang RabbitMQ để Worker xử lý
     publish_job({"job_id": job_id})
 
-    return {"job_id": job_id, "status": job.status}
+    return {
+        "job_id": job_id,
+        "filename": clean_name,
+        "status": JobStatus.QUEUED,
+        "message": "File đã được tiếp nhận và đang chờ xử lý."
+    }
 
-
-@app.get("/jobs/{job_id}")
-def get_job(job_id: str, db: Session = Depends(get_db)):
+@ocr_router.get("/status/{job_id}")
+def get_job_status(job_id: str, db: Session = Depends(get_db)):
     """
-    Client poll endpoint này để xem:
-    - status: QUEUED/RUNNING/SUCCESS/FAILED
-    - metrics: num_pages, processing_time, VRAM peak/reserved peak, stage timing...
-      (metrics do Worker ghi vào DB)
+    GET /api/v1/ocr/status/{job_id}
+    Kiểm tra trạng thái xử lý và các chỉ số GPU (VRAM).
     """
     job = db.get(OCRJob, job_id)
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-
-    # Trả đầy đủ các field quan trọng. Tuỳ DB model của bạn có field nào thì bật field đó.
+        raise HTTPException(status_code=404, detail="Không tìm thấy mã Job.")
+    
     return {
         "job_id": job.job_id,
         "status": job.status,
-        "filename": job.filename,
-
-        # Core metrics
-        "num_pages": job.num_pages,
-        "processing_time": job.processing_time,
-
-        # GPU metrics (Worker ghi)
-        "gpu_name": getattr(job, "gpu_name", None),
-        "gpu_total_mb": getattr(job, "gpu_total_mb", None),
-        "vram_peak_mb": getattr(job, "vram_peak_mb", None),
-        "vram_reserved_peak_mb": getattr(job, "vram_reserved_peak_mb", None),
-
-        # Per-stage timing (nếu bạn có cột trong DB)
-        "t_pdf2img": getattr(job, "t_pdf2img", None),
-        "t_preprocess": getattr(job, "t_preprocess", None),
-        "t_infer": getattr(job, "t_infer", None),
-        "t_postprocess": getattr(job, "t_postprocess", None),
-
-        "error": job.error,
-
-        # Output paths
-        "output_dir": job.output_dir,
-        "markdown_path": job.markdown_path,
-        "json_path": job.json_path,
-
-        "created_at": job.created_at,
-        "updated_at": job.updated_at,
+        "progress": {
+            "num_pages": job.num_pages,
+            "processing_time_sec": job.processing_time
+        },
+        "metrics": {
+            "vram_peak_mb": job.vram_peak_mb,
+            "gpu_name": job.gpu_name
+        },
+        "error": job.error
     }
 
+@ocr_router.get("/documents")
+def list_documents(db: Session = Depends(get_db)):
+    """
+    GET /api/v1/ocr/documents
+    Liệt kê danh sách tất cả các tài liệu đã từng upload.
+    """
+    jobs = db.query(OCRJob).order_by(OCRJob.created_at.desc()).all()
+    return jobs
 
-@app.get("/jobs/{job_id}/result/markdown")
-def download_markdown(job_id: str, db: Session = Depends(get_db)):
+@ocr_router.get("/documents/{id}")
+def get_document_detail(id: str, db: Session = Depends(get_db)):
     """
-    Tải Markdown khi job SUCCESS.
+    GET /api/v1/ocr/documents/{id}
+    Lấy thông tin chi tiết và đường dẫn kết quả của một tài liệu.
     """
-    job = db.get(OCRJob, job_id)
+    job = db.get(OCRJob, id)
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise HTTPException(status_code=404, detail="Tài liệu không tồn tại.")
+    return job
 
-    if job.status != JobStatus.SUCCESS or not job.markdown_path:
-        raise HTTPException(status_code=400, detail="Result not ready")
+@ocr_router.delete("/documents/{id}")
+def delete_document(id: str, db: Session = Depends(get_db)):
+    """
+    DELETE /api/v1/ocr/documents/{id}
+    Xóa tài liệu khỏi hệ thống: Xóa DB + Xóa file kết quả + Xóa ảnh đã crop.
+    """
+    job = db.get(OCRJob, id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Tài liệu không tồn tại.")
 
-    if not os.path.exists(job.markdown_path):
-        raise HTTPException(status_code=404, detail="Markdown file missing on disk")
+    # 1. Xóa thư mục kết quả (chứa MD, JSON và thư mục images đã crop)
+    if job.output_dir and os.path.exists(job.output_dir):
+        shutil.rmtree(job.output_dir)
+        print(f"--- Đã xóa thư mục output: {job.output_dir} ---")
 
+    # 2. Xóa file PDF gốc nếu còn tồn tại trong uploads
+    if job.input_path and os.path.exists(job.input_path):
+        os.remove(job.input_path)
+
+    # 3. Xóa bản ghi trong Database
+    db.delete(job)
+    db.commit()
+
+    return {"message": f"Đã xóa hoàn toàn tài liệu và dữ liệu liên quan của ID: {id}"}
+
+# --- Download Helpers ---
+@ocr_router.get("/get-markdown/{id}")
+def get_markdown(id: str, db: Session = Depends(get_db)):
+    job = db.get(OCRJob, id)
+    if not job or job.status != JobStatus.SUCCESS: 
+        raise HTTPException(status_code=400, detail=f"Chưa có kết quả. Trạng thái hiện tại: {job.status if job else 'N/A'}")
+
+    # Đường dẫn này phải khớp với cái bạn đã lưu ở Bước 1
+    file_full_path = os.path.join(OUTPUT_PATH, id, f"{id}.md")
+
+    if not os.path.exists(file_full_path):
+        raise HTTPException(status_code=404, detail="File không tồn tại.")
+
+    # Trả về phản hồi dạng 'attachment' để trình duyệt TỰ ĐỘNG TẢI
     return FileResponse(
-        job.markdown_path,
-        media_type="text/markdown",
-        filename=Path(job.markdown_path).name,
+        path=file_full_path, 
+        filename=f"Ket_Qua_{id}.md", # Ép trình duyệt mở hộp thoại Save
+        media_type="text/markdown"
     )
 
+# Tích hợp Router vào App chính
+app.include_router(ocr_router)
 
-@app.get("/jobs/{job_id}/result/json")
-def download_json(job_id: str, db: Session = Depends(get_db)):
-    """
-    Tải JSON khi job SUCCESS.
-    """
-    job = db.get(OCRJob, job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-
-    if job.status != JobStatus.SUCCESS or not job.json_path:
-        raise HTTPException(status_code=400, detail="Result not ready")
-
-    if not os.path.exists(job.json_path):
-        raise HTTPException(status_code=404, detail="JSON file missing on disk")
-
-    return FileResponse(
-        job.json_path,
-        media_type="application/json",
-        filename=Path(job.json_path).name,
-    )
+if __name__ == "__main__":
+    import uvicorn
+    # Chạy trên cổng 8001 theo sơ đồ flow
+    uvicorn.run(app, host="0.0.0.0", port=8001)

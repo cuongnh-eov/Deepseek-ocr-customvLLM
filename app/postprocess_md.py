@@ -50,74 +50,41 @@ def extract_coordinates_and_label(ref_text, image_width, image_height):
     return (label_type, cor_list)
 
 
-def draw_bounding_boxes(image, refs, jdx):
-
+def draw_bounding_boxes(image, refs, jdx, out_path):
+    """
+    Hàm thực hiện Crop ảnh dựa trên hệ số 999 (Chuẩn DeepSeek).
+    """
     image_width, image_height = image.size
-    img_draw = image.copy()
-    draw = ImageDraw.Draw(img_draw)
-
-    overlay = Image.new('RGBA', img_draw.size, (0, 0, 0, 0))
-    draw2 = ImageDraw.Draw(overlay)
-    
-    #     except IOError:
-    font = ImageFont.load_default()
-
     img_idx = 0
-    
-    for i, ref in enumerate(refs):
-        try:
-            result = extract_coordinates_and_label(ref, image_width, image_height)
-            if result:
-                label_type, points_list = result
-                
-                color = (np.random.randint(0, 200), np.random.randint(0, 200), np.random.randint(0, 255))
+    # Đảm bảo lưu vào thư mục images bên trong out_path của job
+    img_save_dir = os.path.join(out_path, "images")
+    os.makedirs(img_save_dir, exist_ok=True)
 
-                color_a = color + (20, )
-                for points in points_list:
-                    x1, y1, x2, y2 = points
+    for ref in refs:
+        # TRUYỀN ĐỦ 3 THAM SỐ VÀO ĐÂY ĐỂ FIX LỖI
+        result = extract_coordinates_and_label(ref, image_width, image_height)
+        
+        if result:
+            label_type, points_list = result
+            for points in points_list:
+                # TOẠ ĐỘ CHUẨN DEEPSEEK: x1, y1, x2, y2
+                x1, y1, x2, y2 = points
 
-                    x1 = int(x1 / 999 * image_width)
-                    y1 = int(y1 / 999 * image_height)
+                # QUY ĐỔI HỆ 999
+                left = int(x1 / 999 * image_width)
+                top = int(y1 / 999 * image_height)
+                right = int(x2 / 999 * image_width)
+                bottom = int(y2 / 999 * image_height)
 
-                    x2 = int(x2 / 999 * image_width)
-                    y2 = int(y2 / 999 * image_height)
-
-                    if label_type == 'image':
-                        try:
-                            cropped = image.crop((x1, y1, x2, y2))
-                            cropped.save(f"{OUTPUT_PATH}/images/{jdx}_{img_idx}.jpg")
-                        except Exception as e:
-                            print(e)
-                            pass
-                        img_idx += 1
-                        
+                if label_type == 'image':
                     try:
-                        if label_type == 'title':
-                            draw.rectangle([x1, y1, x2, y2], outline=color, width=4)
-                            draw2.rectangle([x1, y1, x2, y2], fill=color_a, outline=(0, 0, 0, 0), width=1)
-                        else:
-                            draw.rectangle([x1, y1, x2, y2], outline=color, width=2)
-                            draw2.rectangle([x1, y1, x2, y2], fill=color_a, outline=(0, 0, 0, 0), width=1)
-
-                        text_x = x1
-                        text_y = max(0, y1 - 15)
-                            
-                        text_bbox = draw.textbbox((0, 0), label_type, font=font)
-                        text_width = text_bbox[2] - text_bbox[0]
-                        text_height = text_bbox[3] - text_bbox[1]
-                        draw.rectangle([text_x, text_y, text_x + text_width, text_y + text_height], 
-                                    fill=(255, 255, 255, 30))
-                        
-                        draw.text((text_x, text_y), label_type, font=font, fill=color)
-                    except:
-                        pass
-        except:
-            continue
-    img_draw.paste(overlay, (0, 0), overlay)
-    return img_draw
-
-
-
+                        cropped = image.crop((left, top, right, bottom))
+                        img_name = f"{jdx}_{img_idx}.jpg"
+                        cropped.save(os.path.join(img_save_dir, img_name), "JPEG", quality=95)
+                        img_idx += 1
+                    except Exception as e:
+                        print(f"Lỗi crop: {e}")
+    return image
 
 def process_single_image(image, prompt):
     image = detect_and_correct_skew(image)   #them xu ly anh nghieng  
@@ -130,46 +97,52 @@ def process_single_image(image, prompt):
     return cache_item
 
 
-def process_image_with_refs(image, matches_ref, page_idx, save_dir):
+def process_image_with_refs(image, matches_ref, page_idx, out_path):
     """
-    Sửa lỗi name 'r' is not defined và thực hiện Crop ảnh chính xác.
+    Hàm 'vỏ bọc' theo yêu cầu của bạn:
+    Gọi draw_bounding_boxes để thực hiện công việc.
     """
-    width, height = image.size
-    img_idx = 0
+    result_image = draw_bounding_boxes(image, matches_ref, page_idx, out_path)
+    return result_image
+
+
+from  configs.config import MINIO_ACCESS_KEY, MINIO_BUCKET_NAME, MINIO_ENDPOINT, MINIO_SECRET_KEY
+import boto3
+from botocore.client import Config
+def upload_to_minio(local_directory, job_id):
+    """
+    Tự động quét và đẩy tất cả: .md, .json và folder images lên MinIO
+    """
+    s3 = boto3.client(
+        's3',
+        endpoint_url=MINIO_ENDPOINT,
+        aws_access_key_id=MINIO_ACCESS_KEY,
+        aws_secret_access_key=MINIO_SECRET_KEY,
+        config=Config(signature_version='s3v4'),
+        region_name='us-east-1' 
+    )
+
+    # Đảm bảo Bucket tồn tại
+    try:
+        s3.head_bucket(Bucket=MINIO_BUCKET_NAME)
+    except:
+        s3.create_bucket(Bucket=MINIO_BUCKET_NAME)
+
+    # Quét toàn bộ thư mục (bao gồm folder con 'images')
+    for root, dirs, files in os.walk(local_directory):
+        for filename in files:
+            local_path = os.path.join(root, filename)
+            
+            # Giữ nguyên cấu trúc thư mục trên MinIO
+            relative_path = os.path.relpath(local_path, local_directory)
+            minio_path = f"{job_id}/{relative_path}"
+            
+            s3.upload_file(local_path, MINIO_BUCKET_NAME, minio_path)
     
-    # matches_ref là kết quả từ re_match, mỗi phần tử là 1 tuple (full_tag, label, coords_str)
-    for ref in matches_ref:
-        try:
-            label_type = ref[1] # 'image', 'title', vv.
-            if label_type != 'image':
-                continue
-                
-            # Chuyển chuỗi "[[y1, x1, y2, x2]]" thành list
-            points_list = eval(ref[2])
-            
-            for points in points_list:
-                y1, x1, y2, x2 = points
+    print(f"--- Đã đẩy toàn bộ dữ liệu Job {job_id} lên MinIO thành công ---")
 
-                # Chuyển đổi tọa độ hệ 1000 sang pixel thực tế
-                left = int(x1 / 1000 * width)
-                top = int(y1 / 1000 * height)
-                right = int(x2 / 1000 * width)
-                bottom = int(y2 / 1000 * height)
 
-                # Thực hiện CROP (Đây là phần quan trọng nhất để tiết kiệm dung lượng)
-                cropped = image.crop((left, top, right, bottom))
-                
-                img_name = f"{page_idx}_{img_idx}.jpg"
-                save_path = os.path.join(save_dir, img_name)
-                cropped.save(save_path, "JPEG", quality=85)
-                
-                img_idx += 1
-        except Exception as e:
-            print(f"Lỗi Crop ảnh trang {page_idx}: {e}")
-            continue
-            
-    return image # Trả về ảnh gốc nếu bạn vẫn muốn dùng cho việc khác
-
+    
 def process_ocr_output(outputs, images, out_path):
     """
     Xử lý OCR và tự động ghi file Markdown xuống out_path.

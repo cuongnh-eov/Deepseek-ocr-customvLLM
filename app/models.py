@@ -43,3 +43,15 @@ class OCRJob(Base):
     output_dir = Column(String, nullable=True)  # Đường dẫn thư mục lưu kết quả    
     markdown_path = Column(String, nullable=True)  # Đường dẫn file markdown kết quả
     json_path = Column(String, nullable=True)  # Đường dẫn file json kết quả
+
+    # Bổ sung vào class OCRJob trong models.py
+    file_size_mb = Column(Float, nullable=True) 
+    
+    # Stage timing metrics (giúp debug bước nào đang chậm)
+    t_pdf2img = Column(Float, nullable=True)
+    t_preprocess = Column(Float, nullable=True)
+    t_infer = Column(Float, nullable=True)
+    t_postprocess = Column(Float, nullable=True)
+    
+    # Metadata bổ sung
+    is_deleted = Column(Integer, default=0) # 0: active, 1: deleted (soft delete)

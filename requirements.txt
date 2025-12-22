@@ -10,3 +10,4 @@ numpy
 sqlalchemy
 psycopg2-binary
 pika
+boto3

@@ -21,8 +21,9 @@ MODEL_PATH = '/home/cuongnh/PycharmProjects/TTTS_01/DeepSeek-OCRR' # change to y
 # .jpg, .png, .jpeg: run_dpsk_ocr_image.py; 
 # Omnidocbench images path: run_dpsk_ocr_eval_batch.py
 
-INPUT_PATH = '/home/cuongnh/Documents/aaaaaaaaaaaaaaaaaaaa/in' 
-OUTPUT_PATH = './outputs'
+INPUT_PATH = '/home/cuongnh/OCR_docs/data/1_kts_2025_10_23_23347e6_vi_baocaotaichinh_q1_2026.pdf'
+# OUTPUT_PATH = './outputs'
+OUTPUT_PATH = '/home/cuongnh/OCR_docs/outputsssssssssssssssssssssssssssssssss'
 PROMPT = '<image>\n<|grounding|>Convert the document to markdown.'
 # PROMPT = '<image>\nFree OCR.'
 # TODO commonly used prompts
@@ -35,7 +36,15 @@ PROMPT = '<image>\n<|grounding|>Convert the document to markdown.'
 # '先天下之忧而忧'
 # .......
 
+MINIO_ENDPOINT = "http://your-minio-ip:9000"
+MINIO_ACCESS_KEY = "your-access-key"
+MINIO_SECRET_KEY = "your-secret-key"
+MINIO_BUCKET_NAME = "ocr-results"
 
+
+RABBIT_URL = os.getenv("RABBIT_URL", "amqp://guest:guest@localhost:5672/")
+QUEUE_NAME = os.getenv("QUEUE_NAME", "ocr_jobs")
+OUTPUT_PATH = os.getenv("OUTPUT_PATH", "./outputs")
 from transformers import AutoTokenizer
 
 TOKENIZER = AutoTokenizer.from_pretrained(MODEL_PATH, trust_remote_code=True)
