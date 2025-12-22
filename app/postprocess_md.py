@@ -118,10 +118,6 @@ def draw_bounding_boxes(image, refs, jdx):
 
 
 
-def process_image_with_refs(image, ref_texts, jdx):
-    result_image = draw_bounding_boxes(image, ref_texts, jdx)
-    return result_image
-
 
 def process_single_image(image, prompt):
     image = detect_and_correct_skew(image)   #them xu ly anh nghieng  
@@ -134,20 +130,54 @@ def process_single_image(image, prompt):
     return cache_item
 
 
-from app.postprocess_md import re_match, process_image_with_refs
-from configs.config import SKIP_REPEAT
+def process_image_with_refs(image, matches_ref, page_idx, save_dir):
+    """
+    Sửa lỗi name 'r' is not defined và thực hiện Crop ảnh chính xác.
+    """
+    width, height = image.size
+    img_idx = 0
+    
+    # matches_ref là kết quả từ re_match, mỗi phần tử là 1 tuple (full_tag, label, coords_str)
+    for ref in matches_ref:
+        try:
+            label_type = ref[1] # 'image', 'title', vv.
+            if label_type != 'image':
+                continue
+                
+            # Chuyển chuỗi "[[y1, x1, y2, x2]]" thành list
+            points_list = eval(ref[2])
+            
+            for points in points_list:
+                y1, x1, y2, x2 = points
 
-def process_ocr_output(outputs, images):
+                # Chuyển đổi tọa độ hệ 1000 sang pixel thực tế
+                left = int(x1 / 1000 * width)
+                top = int(y1 / 1000 * height)
+                right = int(x2 / 1000 * width)
+                bottom = int(y2 / 1000 * height)
+
+                # Thực hiện CROP (Đây là phần quan trọng nhất để tiết kiệm dung lượng)
+                cropped = image.crop((left, top, right, bottom))
+                
+                img_name = f"{page_idx}_{img_idx}.jpg"
+                save_path = os.path.join(save_dir, img_name)
+                cropped.save(save_path, "JPEG", quality=85)
+                
+                img_idx += 1
+        except Exception as e:
+            print(f"Lỗi Crop ảnh trang {page_idx}: {e}")
+            continue
+            
+    return image # Trả về ảnh gốc nếu bạn vẫn muốn dùng cho việc khác
+
+def process_ocr_output(outputs, images, out_path):
     """
-    Process OCR outputs
-    
-    Args:
-        outputs: List of vLLM outputs
-        images: Original PIL images
-    
-    Returns:
-        Tuple: (contents, contents_det, draw_images)
+    Xử lý OCR và tự động ghi file Markdown xuống out_path.
     """
+    # Tạo thư mục images bên trong out_path
+    img_save_dir = os.path.join(out_path, "images")
+    os.makedirs(img_save_dir, exist_ok=True)
+    
     contents = ''
     contents_det = ''
     draw_images = []
@@ -155,36 +185,41 @@ def process_ocr_output(outputs, images):
     for idx, (output, image) in enumerate(zip(outputs, images)):
         content = output.outputs[0].text
         
-        # Handle EOS token
         if '<｜end▁of▁sentence｜>' in content:
             content = content.replace('<｜end▁of▁sentence｜>', '')
-        else:
-            if SKIP_REPEAT:
-                continue
+        elif SKIP_REPEAT and not content.strip():
+            continue
         
-        page_num = '\n<--- Page Split --->'
+        page_num_marker = '\n<--- Page Split --->'
+        contents_det += content + f'\n{page_num_marker}\n'
         
-        # Process with refs
-        contents_det += content + f'\n{page_num}\n'
-        
-        image_draw = image.copy()
+        # Lấy các refs (hình ảnh, tiêu đề...)
         matches_ref, matches_images, matches_other = re_match(content)
-        result_image = process_image_with_refs(image_draw, matches_ref, idx)
-        draw_images.append(result_image)
         
-        # Replace image references
-        for img_idx, match in enumerate(matches_images):
-            content = content.replace(match, f'![](images/{idx}_{img_idx}.jpg)\n')
+        # Gọi hàm CROP ảnh đã sửa ở trên
+        process_image_with_refs(image, matches_ref, idx, img_save_dir)
         
-        # Clean up other references
+        # Thay thế link ảnh trong nội dung Markdown
+        for img_idx, match_tag in enumerate(matches_images):
+            content = content.replace(match_tag, f'![](images/{idx}_{img_idx}.jpg)\n')
+        
+        # Dọn dẹp các tag khác
         for match in matches_other:
             content = content.replace(match, '')
         
-        content = content.replace('\\coloneqq', ':=')
-        content = content.replace('\\eqqcolon', '=:')
-        content = content.replace('\n\n\n\n', '\n\n')
-        content = content.replace('\n\n\n', '\n\n')
+        # Chuẩn hóa văn bản
+        content = content.replace('\\coloneqq', ':=').replace('\\eqqcolon', '=: ')
+        content = content.replace('\n\n\n\n', '\n\n').replace('\n\n\n', '\n\n')
         
-        contents += content + f'\n{page_num}\n'
+        contents += content + f'\n{page_num_marker}\n'
+        draw_images.append(image)
+
+    # # TỰ ĐỘNG GHI FILE MARKDOWN (Khôi phục logic đã mất)
+    # job_id = os.path.basename(out_path)
+    # md_file_path = os.path.join(out_path, f"{job_id}.md")
+    # with open(md_file_path, "w", encoding="utf-8") as f:
+    #     f.write(contents)
+    
+    # print(f"--- Đã lưu Markdown tại: {md_file_path} ---")
     
     return contents, contents_det, draw_images

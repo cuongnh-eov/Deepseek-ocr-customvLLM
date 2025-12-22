@@ -7,3 +7,6 @@ easydict
 addict 
 Pillow
 numpy
+sqlalchemy
+psycopg2-binary
+pika

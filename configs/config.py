@@ -21,8 +21,8 @@ MODEL_PATH = '/home/cuongnh/PycharmProjects/TTTS_01/DeepSeek-OCRR' # change to y
 # .jpg, .png, .jpeg: run_dpsk_ocr_image.py; 
 # Omnidocbench images path: run_dpsk_ocr_eval_batch.py
 
-INPUT_PATH = '/home/cuongnh/Downloads/Final (1) (1).pdf' 
-OUTPUT_PATH = '/home/cuongnh/PycharmProjects/TTTS_01/TTS-01/res/Atable'
+INPUT_PATH = '/home/cuongnh/Documents/aaaaaaaaaaaaaaaaaaaa/in' 
+OUTPUT_PATH = './outputs'
 PROMPT = '<image>\n<|grounding|>Convert the document to markdown.'
 # PROMPT = '<image>\nFree OCR.'
 # TODO commonly used prompts

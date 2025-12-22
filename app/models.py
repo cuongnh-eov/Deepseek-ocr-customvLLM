@@ -1,0 +1,45 @@
+"""
+app/models.py
+- Định nghĩa bảng ocr_jobs lưu "job state" (trạng thái xử lý).
+- Mỗi job là 1 lần upload PDF.
+"""
+import enum
+from datetime import datetime
+from sqlalchemy import Column, String, DateTime, Integer, Text, Enum, Float
+from app.db import Base
+
+
+class JobStatus(enum.Enum):
+    PENDING = "PENDING" # Chờ xử lý
+    QUEUED = "QUEUED" # Đang xếp hàng
+    RUNNING = "RUNNING" # Đang xử lý
+    SUCCESS = "SUCCESS" # Xử lý thành công
+    FAILED = "FAILED" # Xử lý thất bại
+
+
+class OCRJob(Base):
+    __tablename__ = "ocr_jobs"
+
+    job_id = Column(String, primary_key=True, index=True)
+
+    filename = Column(String, nullable=False)  # Tên file PDF đã upload
+    input_path = Column(String, nullable=False)  # Đường dẫn file PDF đã upload
+
+    status = Column(Enum(JobStatus), default=JobStatus.PENDING, nullable=False)
+
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    num_pages = Column(Integer, nullable=True)  # Số trang trong PDF
+    processing_time = Column(Integer, nullable=True)  # Thời gian xử lý (tính bằng giây)
+    error = Column(Text, nullable=True)  # Lỗi nếu có
+
+     # ===== metrics GPU (VRAM) =====
+    gpu_name = Column(String, nullable=True)
+    gpu_total_mb = Column(Integer, nullable=True)
+    vram_peak_mb = Column(Integer, nullable=True)          # peak allocated
+    vram_reserved_peak_mb = Column(Integer, nullable=True) # peak reserved
+
+    output_dir = Column(String, nullable=True)  # Đường dẫn thư mục lưu kết quả    
+    markdown_path = Column(String, nullable=True)  # Đường dẫn file markdown kết quả
+    json_path = Column(String, nullable=True)  # Đường dẫn file json kết quả

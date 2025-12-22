@@ -70,6 +70,8 @@ Thumbs.db
 
 data/
 res/
+output/
+uploads/
 
 # nếu bạn cũng muốn bỏ luôn output xử lý thì mở comment dòng dưới:
 
