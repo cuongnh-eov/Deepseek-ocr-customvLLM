@@ -42,7 +42,7 @@ from deepencoder.clip_sdpa import build_clip_l
 from deepencoder.build_linear import MlpProjector
 from addict import Dict
 # import time
-from configs.config import IMAGE_SIZE, BASE_SIZE, CROP_MODE, PRINT_NUM_VIS_TOKENS, PROMPT
+from app.core.config import IMAGE_SIZE, BASE_SIZE, CROP_MODE, PRINT_NUM_VIS_TOKENS, PROMPT
 # The image token id may be various
 _IMAGE_TOKEN = "<image>"
 

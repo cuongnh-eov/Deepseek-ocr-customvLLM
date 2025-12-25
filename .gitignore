@@ -86,3 +86,12 @@ uploads/
 .env
 *.key
 *.pem
+
+
+corpus_manifest_single_gt.csv
+corpus_manifest.csv
+
+
+
+runapi.sh
+runwoker.sh

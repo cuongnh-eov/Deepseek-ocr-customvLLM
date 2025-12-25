@@ -9,14 +9,12 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, APIRouter
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.db import get_db, Base, engine
-from app.models import OCRJob, JobStatus
-from app.queue import publish_job
+from app.core.db import get_db, Base, engine
+from app.core.models import OCRJob, JobStatus
+# from app.core.queue import publish_job
+from app.core.config import UPLOAD_PATH, OUTPUT_PATH, MAX_UPLOAD_MB
 
-# --- Cấu hình đường dẫn ---
-UPLOAD_PATH = os.getenv("UPLOAD_PATH", "./uploads")
-OUTPUT_PATH = os.getenv("OUTPUT_PATH", "./outputs")
-MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "200"))
+
 
 os.makedirs(UPLOAD_PATH, exist_ok=True)
 os.makedirs(OUTPUT_PATH, exist_ok=True)
@@ -37,51 +35,62 @@ def _safe_filename(name: str) -> str:
     return Path(name).name
 
 # --- ENDPOINTS ---
-
 @ocr_router.post("/upload")
 async def upload_document(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    """
-    POST /api/v1/ocr/upload
-    Tải lên file PDF và đẩy vào hàng chờ xử lý.
-    """
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Chỉ hỗ trợ định dạng PDF.")
 
-    # Đọc file và kiểm tra dung lượng
-    data = await file.read()
-    size_mb = round(len(data) / (1024 * 1024), 2)
-    if size_mb > MAX_UPLOAD_MB:
-        raise HTTPException(status_code=413, detail=f"File quá lớn ({size_mb}MB). Giới hạn: {MAX_UPLOAD_MB}MB")
-
     job_id = uuid.uuid4().hex
-    clean_name = _safe_filename(file.filename)
     
-    # Lưu file PDF gốc vào thư mục uploads
-    saved_pdf_path = os.path.join(UPLOAD_PATH, f"{job_id}_{clean_name}")
-    with open(saved_pdf_path, "wb") as f:
-        f.write(data)
+    try:
+        data = await file.read()
+        size_mb = round(len(data) / (1024 * 1024), 2)
+        
+        if size_mb > MAX_UPLOAD_MB:
+            raise HTTPException(status_code=413, detail=f"File quá lớn. Giới hạn: {MAX_UPLOAD_MB}MB")
+        
+        clean_name = _safe_filename(file.filename)
+        saved_pdf_path = os.path.join(UPLOAD_PATH, f"{job_id}_{clean_name}")
+        
+        with open(saved_pdf_path, "wb") as f:
+            f.write(data)
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi lưu file: {str(e)}")
 
-    # Tạo bản ghi Job mới
-    new_job = OCRJob(
-        job_id=job_id,
-        filename=clean_name,
-        input_path=saved_pdf_path,
-        file_size_mb=size_mb,
-        status=JobStatus.QUEUED,
-        created_at=datetime.now(timezone.utc)
-    )
-    db.add(new_job)
-    db.commit()
+    try:
+        new_job = OCRJob(
+            job_id=job_id,
+            filename=clean_name,
+            input_path=saved_pdf_path,
+            file_size_mb=size_mb,
+            status=JobStatus.QUEUED,
+            created_at=datetime.now(timezone.utc)
+        )
+        db.add(new_job)
+        db.commit()
+    except Exception as e:
+        if os.path.exists(saved_pdf_path):
+            os.remove(saved_pdf_path)
+        raise HTTPException(status_code=500, detail=f"Lỗi DB: {str(e)}")
 
-    # Đẩy tin nhắn sang RabbitMQ để Worker xử lý
-    publish_job({"job_id": job_id})
+    # Đẩy Job vào Celery - Dùng đúng đường dẫn module mới
+    try:
+        from app.tasks.tasks import process_ocr_document_task
+        process_ocr_document_task.delay(job_id)
+    except Exception as e:
+        # Nếu đẩy vào RabbitMQ lỗi, cập nhật trạng thái job để user biết
+        new_job.status = JobStatus.FAILED
+        new_job.error = f"Queue Error: {str(e)}"
+        db.commit()
+        raise HTTPException(status_code=500, detail="Không thể đẩy job vào hàng đợi.")
 
     return {
         "job_id": job_id,
-        "filename": clean_name,
         "status": JobStatus.QUEUED,
-        "message": "File đã được tiếp nhận và đang chờ xử lý."
+        "message": "Đã tiếp nhận."
     }
+
 
 @ocr_router.get("/status/{job_id}")
 def get_job_status(job_id: str, db: Session = Depends(get_db)):

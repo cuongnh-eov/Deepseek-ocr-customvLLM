@@ -4,9 +4,9 @@ app/models.py
 - Mỗi job là 1 lần upload PDF.
 """
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, String, DateTime, Integer, Text, Enum, Float
-from app.db import Base
+from app.core.db import Base
 
 
 class JobStatus(enum.Enum):
@@ -27,8 +27,8 @@ class OCRJob(Base):
 
     status = Column(Enum(JobStatus), default=JobStatus.PENDING, nullable=False)
 
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=datetime.now(timezone.utc))
+    updated_at = Column(DateTime, nullable=False, default=datetime.now(timezone.utc))
 
     num_pages = Column(Integer, nullable=True)  # Số trang trong PDF
     processing_time = Column(Integer, nullable=True)  # Thời gian xử lý (tính bằng giây)
@@ -55,3 +55,5 @@ class OCRJob(Base):
     
     # Metadata bổ sung
     is_deleted = Column(Integer, default=0) # 0: active, 1: deleted (soft delete)
+    result_path = Column(String, nullable=True) # Lưu link MinIO cho file .md
+    minio_json_url = Column(String, nullable=True)    # Lưu link MinIO cho file .json

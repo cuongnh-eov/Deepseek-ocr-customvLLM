@@ -5,12 +5,12 @@ import torch
 import json
 from pathlib import Path
 from datetime import datetime
-from configs.config import INPUT_PATH, OUTPUT_PATH, PROMPT
-from app.model_init import llm, sampling_params
-from app.processor import preprocess_batch, generate_ocr
-from app.postprocess_md import process_ocr_output
-from app.file_handler import prepare_output_dirs, get_output_paths, save_outputs
-from app.utils import pdf_to_images_high_quality
+from app.core.config import INPUT_PATH, OUTPUT_PATH, PROMPT
+from worker.model_init import llm, sampling_params
+from app.services.processor import preprocess_batch, generate_ocr
+from app.utils.postprocess_md import process_ocr_output
+from app.services.file_handler import prepare_output_dirs, get_output_paths, save_outputs
+from app.utils.utils import pdf_to_images_high_quality
 
 class GPUMonitor:
     """Monitor GPU usage"""

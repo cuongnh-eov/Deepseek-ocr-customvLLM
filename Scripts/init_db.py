@@ -1,7 +1,7 @@
 # init_db.py
 import os
-from app.db import engine, Base
-from app.models import OCRJob
+from app.core.db import engine, Base
+from app.core.models import OCRJob
 
 def init():
     print("🛠 Đang khởi tạo database...")

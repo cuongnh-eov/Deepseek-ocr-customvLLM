@@ -25,26 +25,38 @@ INPUT_PATH = '/home/cuongnh/OCR_docs/data/1_kts_2025_10_23_23347e6_vi_baocaotaic
 # OUTPUT_PATH = './outputs'
 OUTPUT_PATH = '/home/cuongnh/OCR_docs/outputsssssssssssssssssssssssssssssssss'
 PROMPT = '<image>\n<|grounding|>Convert the document to markdown.'
-# PROMPT = '<image>\nFree OCR.'
-# TODO commonly used prompts
-# document: <image>\n<|grounding|>Convert the document to markdown.
-# other image: <image>\n<|grounding|>OCR this image.
-# without layouts: <image>\nFree OCR.
-# figures in document: <image>\nParse the figure.
-# general: <image>\nDescribe this image in detail.
-# rec: <image>\nLocate <|ref|>xxxx<|/ref|> in the image.
-# '先天下之忧而忧'
-# .......
 
-MINIO_ENDPOINT = "http://your-minio-ip:9000"
-MINIO_ACCESS_KEY = "your-access-key"
-MINIO_SECRET_KEY = "your-secret-key"
+
+import os
+MINIO_ENDPOINT = "http://localhost:9000"
+MINIO_ACCESS_KEY = "rag_flow"
+MINIO_SECRET_KEY = "infini_rag_flow"
 MINIO_BUCKET_NAME = "ocr-results"
 
 
-RABBIT_URL = os.getenv("RABBIT_URL", "amqp://guest:guest@localhost:5672/")
+UPLOAD_PATH = os.getenv("UPLOAD_PATH", "./uploads")
+OUTPUT_PATH = os.getenv("OUTPUT_PATH", "./outputs")
+MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "200"))
+
+# Sửa lại dòng này trong app/core/config.py
+raw_rabbit = os.getenv("RABBIT_URL", "amqp://guest:guest@localhost:5672/")
+# Xóa khoảng trắng và đảm bảo chỉ có 1 dấu / ở cuối
+RABBIT_URL = raw_rabbit.strip().rstrip('/') + '/'
+
+
+REDIS_URL = os.getenv("REDIS_URL", "redis://:infini_rag_flow@127.0.0.1:6379/0")
 QUEUE_NAME = os.getenv("QUEUE_NAME", "ocr_jobs")
 OUTPUT_PATH = os.getenv("OUTPUT_PATH", "./outputs")
-from transformers import AutoTokenizer
+# Trong file configs/config.py
+try:
+    from transformers import AutoTokenizer
+    TOKENIZER = AutoTokenizer.from_pretrained(MODEL_PATH, trust_remote_code=True)
+    print("✅ Tokenizer loaded.")
+except Exception as e:
+    TOKENIZER = None
+    print(f"⚠️ Không load được Tokenizer DeepSeek: {e}. Worker sẽ chạy ở chế độ dự phòng.")
 
-TOKENIZER = AutoTokenizer.from_pretrained(MODEL_PATH, trust_remote_code=True)
+
+
+
+DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql+psycopg2://ocr_cuong:ocr_cuong@localhost:5432/ocr_cuong_db')
