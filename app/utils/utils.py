@@ -4,7 +4,12 @@ import img2pdf
 import io
 import re
 from tqdm import tqdm
+
+
 import torch
+from typing import Optional, Tuple
+
+
 from concurrent.futures import ThreadPoolExecutor
  
 
@@ -12,7 +17,7 @@ from app.core.config import MODEL_PATH, INPUT_PATH, OUTPUT_PATH, PROMPT, SKIP_RE
 
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
-from deepseek_ocr import DeepseekOCRForCausalLM
+from app.core.deepseek_ocr import DeepseekOCRForCausalLM
 
 from vllm.model_executor.models.registry import ModelRegistry
 
@@ -85,3 +90,34 @@ def pil_to_pdf_img2pdf(pil_images, output_path):
 
     except Exception as e:
         print(f"error: {e}")
+
+    
+def get_gpu_info() -> Tuple[Optional[str], Optional[int]]:
+    """
+    Lấy thông tin GPU đang dùng.
+    Return: (gpu_name, total_mb) hoặc (None, None) nếu không có CUDA.
+    """
+    if not torch.cuda.is_available():
+        return None, None
+    idx = torch.cuda.current_device()
+    name = torch.cuda.get_device_name(idx)
+    total_mb = int(torch.cuda.get_device_properties(idx).total_memory / (1024 * 1024))
+    return name, total_mb
+def reset_gpu_peak():
+    """
+    Reset peak memory stats để đo "peak VRAM" chính xác cho từng job.
+    """
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats()
+def read_gpu_peak_mb() -> Tuple[Optional[int], Optional[int]]:
+    """
+    Read peak memory used during job.
+    - allocated: memory do tensors allocate
+    - reserved : memory cached by CUDA allocator
+    """
+    if not torch.cuda.is_available():
+        return None, None
+    peak_alloc = int(torch.cuda.max_memory_allocated() / (1024 * 1024))
+    peak_resv = int(torch.cuda.max_memory_reserved() / (1024 * 1024))
+    return peak_alloc, peak_resv
+

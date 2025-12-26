@@ -44,7 +44,7 @@ from addict import Dict
 # import time
 from app.core.config import IMAGE_SIZE, BASE_SIZE, CROP_MODE, PRINT_NUM_VIS_TOKENS, PROMPT
 # The image token id may be various
-_IMAGE_TOKEN = "<image>"
+from app.core.config import _IMAGE_TOKEN
 
 
 class DeepseekOCRProcessingInfo(BaseProcessingInfo):

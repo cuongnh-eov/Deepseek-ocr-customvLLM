@@ -2,7 +2,7 @@ import os
 import torch
 from vllm import LLM, SamplingParams
 from vllm.model_executor.models.registry import ModelRegistry
-from deepseek_ocr import DeepseekOCRForCausalLM
+from app.core.deepseek_ocr import DeepseekOCRForCausalLM
 from process.ngram_norepeat import NoRepeatNGramLogitsProcessor
 from app.core.config import MODEL_PATH, MAX_CONCURRENCY
 

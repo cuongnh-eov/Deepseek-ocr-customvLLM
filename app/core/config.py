@@ -60,3 +60,6 @@ except Exception as e:
 
 
 DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql+psycopg2://ocr_cuong:ocr_cuong@localhost:5432/ocr_cuong_db')
+
+
+_IMAGE_TOKEN = "<image>"

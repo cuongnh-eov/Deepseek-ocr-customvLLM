@@ -1,29 +1,3 @@
-# import logging
-# import sys
-# import os
-# from app.core.celery_app import celery_app
-
-# logger = logging.getLogger(__name__)
-
-# @celery_app.task(bind=True, name="tasks.process_ocr_document")
-# def process_ocr_document_task(self, job_id: str):
-#     try:
-#         # Đảm bảo thư mục gốc nằm trong sys.path
-#         project_root = os.getcwd()
-#         if project_root not in sys.path:
-#             sys.path.insert(0, project_root)
-            
-#         # Import worker
-#         from worker.worker import process_one_job
-        
-#         logger.info(f"=== [START] Xử lý Job ID: {job_id} ===")
-#         result = process_one_job(job_id)
-#         return f"SUCCESS: {result}"
-        
-#     except Exception as exc:
-#         logger.error(f"Lỗi thực thi Task: {exc}", exc_info=True)
-#         return f"FAILED: {str(exc)}"
-
 import logging
 import sys
 import os
@@ -43,7 +17,7 @@ def process_ocr_document_task(self, job_id: str):
             sys.path.insert(0, project_root)
             
         # 2. Import logic xử lý thực tế
-        from worker.worker import process_one_job
+        from app.services.ocr_service import process_one_job
         
         logger.info(f"=== [CELERY START] Nhận Job ID: {job_id} ===")
         

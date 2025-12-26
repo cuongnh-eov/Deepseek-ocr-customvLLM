@@ -1,30 +1,23 @@
-"""
-worker/worker.py
-================
-Vai trò: chạy OCR "nặng" (GPU) theo message từ RabbitMQ.
-Luồng:
-1) Consume message {"job_id": "..."} từ queue.
-2) Load job từ DB -> lấy input_path.
-3) Update DB: status=RUNNING + (gpu_name, gpu_total_mb).
-4) Reset peak VRAM stats -> chạy pipeline.
-5) Save outputs (md/json) -> update DB: SUCCESS + metrics.
-6) Nếu lỗi -> update DB: FAILED + error + (VRAM peak nếu đọc được).
-Ghi metrics:
-- processing_time: tổng thời gian job
-- t_pdf2img, t_preprocess, t_infer, t_postprocess: theo stage (nếu DB có cột)
-- vram_peak_mb / vram_reserved_peak_mb: peak memory stats (torch.cuda)
-"""
-from datetime import datetime, timezone
+from datetime import datetime, timezone  # Để tạo mốc thời gian updated_at
+from sqlalchemy.orm import Session       # Để định nghĩa kiểu dữ liệu cho tham số db
+from app.core.models import OCRJob       # Để định nghĩa kiểu dữ liệu cho tham số job
+
+
+
+# 1. Thư viện hệ thống & Python chuẩn
 import os
 import time
 import re
-import torch
 import json as pyjson
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Tuple
+
+# 2. Thư viện bên thứ ba (Cần cài qua pip)
+import torch
 from sqlalchemy.orm import Session
 
-# --- Import từ Core ---
+# 3. Kết nối Core (Database, Models, Config)
 from app.core.db import SessionLocal
 from app.core.models import OCRJob, JobStatus
 from app.core.config import (
@@ -32,72 +25,28 @@ from app.core.config import (
     MINIO_ENDPOINT, MINIO_BUCKET_NAME
 )
 
-# --- Import từ Services & Utils ---
-# Lưu ý: Kiểm tra chính xác processor.py nằm ở đâu (Tree của bạn ghi services)
-from app.services.processor import preprocess_batch, generate_ocr, run_tesseract_fallback
-from app.services.publisher import send_finished_notification
+# 4. Tiện ích GPU (Các hàm vừa tách sang app/utils/gpu_utils.py)
+from app.utils.utils import get_gpu_info, reset_gpu_peak, read_gpu_peak_mb
 
+# 5. Tiện ích xử lý văn bản (Hàm vừa tách sang app/utils/postprocess_md.py)
+from app.utils.postprocess_md import extract_content
+
+# 6. Tiện ích PDF & Post-process (Markdown, JSON, MinIO)
 from app.utils.utils import pdf_to_images_high_quality
 from app.utils.postprocess_md import process_ocr_output, upload_to_minio
 from app.utils.postprocess_json import process_ocr_to_blocks
 
-# --- Import từ Worker (Cùng folder) ---
-from worker.model_init import llm, sampling_params
-def get_gpu_info() -> Tuple[Optional[str], Optional[int]]:
-    """
-    Lấy thông tin GPU đang dùng.
-    Return: (gpu_name, total_mb) hoặc (None, None) nếu không có CUDA.
-    """
-    if not torch.cuda.is_available():
-        return None, None
-    idx = torch.cuda.current_device()
-    name = torch.cuda.get_device_name(idx)
-    total_mb = int(torch.cuda.get_device_properties(idx).total_memory / (1024 * 1024))
-    return name, total_mb
-def reset_gpu_peak():
-    """
-    Reset peak memory stats để đo "peak VRAM" chính xác cho từng job.
-    """
-    if torch.cuda.is_available():
-        torch.cuda.reset_peak_memory_stats()
-def read_gpu_peak_mb() -> Tuple[Optional[int], Optional[int]]:
-    """
-    Read peak memory used during job.
-    - allocated: memory do tensors allocate
-    - reserved : memory cached by CUDA allocator
-    """
-    if not torch.cuda.is_available():
-        return None, None
-    peak_alloc = int(torch.cuda.max_memory_allocated() / (1024 * 1024))
-    peak_resv = int(torch.cuda.max_memory_reserved() / (1024 * 1024))
-    return peak_alloc, peak_resv
+# 7. Logic xử lý AI (Inference)
+from app.services.processor import preprocess_batch, generate_ocr
+
+# 8. Khởi tạo Model (LLM)
+# Lưu ý: Điều chỉnh path này tùy vào vị trí file model_init.py của bạn
+from worker.model_init import llm, sampling_params 
+
+# 9. Dịch vụ thông báo (RabbitMQ Publisher)
+from app.services.publisher import send_finished_notification
 
 
-def extract_content(text: str, job_id: str) -> str:
-    """
-    Làm sạch output raw của model theo logic bạn đang dùng:
-    - bỏ end-of-sentence token
-    - thay <|ref|>image... bằng markdown image placeholder
-    - xoá các ref/det khác
-    - chuẩn hoá ký hiệu latex
-    """
-    if "<｜end▁of▁sentence｜>" in text:
-        text = text.replace("<｜end▁of▁sentence｜>", "")
-    pattern = r'(<\|ref\|>(.*?)<\|/ref\|><\|det\|>(.*?)<\|/det\|>)'
-    matches = re.findall(pattern, text, re.DOTALL)
-    matches_image, matches_other = [], []
-    for a_match in matches:
-        if "<|ref|>image<|/ref|>" in a_match[0]:
-            matches_image.append(a_match[0])
-        else:
-            matches_other.append(a_match[0])
-    for img_idx, match in enumerate(matches_image):
-        text = text.replace(match, f"![](./{job_id}/images/{img_idx}.jpg)\n")
-    for match in matches_other:
-        text = text.replace(match, "")
-    text = text.replace("\\coloneqq", ":=").replace("\\eqqcolon", "=:")
-    text = text.replace("\n\n\n\n", "\n\n").replace("\n\n\n", "\n\n")
-    return text
 def update_job(db: Session, job: OCRJob, **kwargs):
     """
     Helper cập nhật job + updated_at rồi commit.

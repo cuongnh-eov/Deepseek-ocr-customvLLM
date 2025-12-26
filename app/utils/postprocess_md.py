@@ -12,7 +12,7 @@ from app.core.config import MODEL_PATH, INPUT_PATH, OUTPUT_PATH, PROMPT, SKIP_RE
 
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
-from deepseek_ocr import DeepseekOCRForCausalLM
+from app.core.deepseek_ocr import DeepseekOCRForCausalLM
 
 from vllm.model_executor.models.registry import ModelRegistry
 
@@ -20,6 +20,34 @@ from vllm import LLM, SamplingParams
 from process.ngram_norepeat import NoRepeatNGramLogitsProcessor
 from process.image_process import DeepseekOCRProcessor
 from process.image_process import detect_and_correct_skew, crop_pixels_all_sides
+
+
+
+def extract_content(text: str, job_id: str) -> str:
+    """
+    Làm sạch output raw của model theo logic bạn đang dùng:
+    - bỏ end-of-sentence token
+    - thay <|ref|>image... bằng markdown image placeholder
+    - xoá các ref/det khác
+    - chuẩn hoá ký hiệu latex
+    """
+    if "<｜end▁of▁sentence｜>" in text:
+        text = text.replace("<｜end▁of▁sentence｜>", "")
+    pattern = r'(<\|ref\|>(.*?)<\|/ref\|><\|det\|>(.*?)<\|/det\|>)'
+    matches = re.findall(pattern, text, re.DOTALL)
+    matches_image, matches_other = [], []
+    for a_match in matches:
+        if "<|ref|>image<|/ref|>" in a_match[0]:
+            matches_image.append(a_match[0])
+        else:
+            matches_other.append(a_match[0])
+    for img_idx, match in enumerate(matches_image):
+        text = text.replace(match, f"![](./{job_id}/images/{img_idx}.jpg)\n")
+    for match in matches_other:
+        text = text.replace(match, "")
+    text = text.replace("\\coloneqq", ":=").replace("\\eqqcolon", "=:")
+    text = text.replace("\n\n\n\n", "\n\n").replace("\n\n\n", "\n\n")
+    return text
 
 
 def re_match(text):
