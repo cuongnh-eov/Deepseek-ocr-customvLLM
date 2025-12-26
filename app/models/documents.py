@@ -6,7 +6,7 @@ app/models.py
 import enum
 from datetime import datetime, timezone
 from sqlalchemy import Column, String, DateTime, Integer, Text, Enum, Float
-from app.core.db import Base
+from app.core.database import Base
 
 
 class JobStatus(enum.Enum):

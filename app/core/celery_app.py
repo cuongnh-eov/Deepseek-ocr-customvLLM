@@ -1,5 +1,5 @@
 from celery import Celery
-from app.core.config import RABBIT_URL, REDIS_URL
+from app.config import RABBIT_URL, REDIS_URL
 
 
 celery_app = Celery(

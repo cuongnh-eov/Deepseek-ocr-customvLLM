@@ -1,8 +1,5 @@
 from datetime import datetime, timezone  # Để tạo mốc thời gian updated_at
 from sqlalchemy.orm import Session       # Để định nghĩa kiểu dữ liệu cho tham số db
-from app.core.models import OCRJob       # Để định nghĩa kiểu dữ liệu cho tham số job
-
-
 
 # 1. Thư viện hệ thống & Python chuẩn
 import os
@@ -18,9 +15,9 @@ import torch
 from sqlalchemy.orm import Session
 
 # 3. Kết nối Core (Database, Models, Config)
-from app.core.db import SessionLocal
-from app.core.models import OCRJob, JobStatus
-from app.core.config import (
+from app.core.database import SessionLocal
+from app.models.documents import OCRJob, JobStatus
+from app.config import (
     PROMPT, OUTPUT_PATH, 
     MINIO_ENDPOINT, MINIO_BUCKET_NAME
 )

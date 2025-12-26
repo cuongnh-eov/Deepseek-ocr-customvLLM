@@ -47,8 +47,8 @@ export REDIS_URL="redis://:infini_rag_flow@127.0.0.1:6379/0"
 echo "🚀 Đang khởi chạy hệ thống OCR..."
 
 # 3. Khởi chạy FastAPI (Chạy ngầm với &)
-# Chú ý: Trỏ vào app.api.main vì bạn đã dời main.py vào thư mục api
-uvicorn app.api.main:app --host 0.0.0.0 --port 8001 &
+# Chú ý: Trỏ vào app.main vì bạn đã dời main.py vào thư mục api
+uvicorn app.main:app --host 0.0.0.0 --port 8001 &
 
 # 4. Khởi chạy Celery Worker (Chạy foreground để xem log)
 # Chú ý: Trỏ vào app.core.celery_app vì đối tượng Celery nằm ở đó

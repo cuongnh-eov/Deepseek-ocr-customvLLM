@@ -13,11 +13,11 @@ from typing import Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor
  
 
-from app.core.config import MODEL_PATH, INPUT_PATH, OUTPUT_PATH, PROMPT, SKIP_REPEAT, MAX_CONCURRENCY, NUM_WORKERS, CROP_MODE
+from app.config import MODEL_PATH, INPUT_PATH, OUTPUT_PATH, PROMPT, SKIP_REPEAT, MAX_CONCURRENCY, NUM_WORKERS, CROP_MODE
 
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
-from app.core.deepseek_ocr import DeepseekOCRForCausalLM
+from app.core.ocr_engine import DeepseekOCRForCausalLM
 
 from vllm.model_executor.models.registry import ModelRegistry
 

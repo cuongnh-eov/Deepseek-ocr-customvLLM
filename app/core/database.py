@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session, declarative_base
-from app.core.config import DATABASE_URL
+from app.config import DATABASE_URL
 
 # Thêm cấu hình Pool để tránh lỗi mất kết nối khi treo máy lâu
 engine = create_engine(

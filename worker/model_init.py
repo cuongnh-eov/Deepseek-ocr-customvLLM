@@ -2,9 +2,9 @@ import os
 import torch
 from vllm import LLM, SamplingParams
 from vllm.model_executor.models.registry import ModelRegistry
-from app.core.deepseek_ocr import DeepseekOCRForCausalLM
+from app.core.ocr_engine import DeepseekOCRForCausalLM
 from process.ngram_norepeat import NoRepeatNGramLogitsProcessor
-from app.core.config import MODEL_PATH, MAX_CONCURRENCY
+from app.config import MODEL_PATH, MAX_CONCURRENCY
 
 if torch.version.cuda == '11.8':
     os.environ["TRITON_PTXAS_PATH"] = "/usr/local/cuda-11.8/bin/ptxas"

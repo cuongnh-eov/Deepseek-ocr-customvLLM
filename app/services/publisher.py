@@ -1,36 +1,8 @@
-# import pika
-# import json
-
-# def send_finished_notification(job_id):
-#     # 1. Kết nối đến RabbitMQ
-#     connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-#     channel = connection.channel()
-
-#     # 2. Khai báo hàng đợi (Queue) tên là 'job_finished'
-#     channel.queue_declare(queue='job_finished', durable=True)
-
-#     # 3. Tạo nội dung tin nhắn dạng JSON
-#     message = {
-#         "job_id": job_id,
-#         "status": "completed",
-#         "timestamp": str(time.time())
-#     }
-
-#     # 4. Bắn tin nhắn (Publish)
-#     channel.basic_publish(
-#         exchange='',
-#         routing_key='job_finished', # Tin nhắn gửi vào đúng "hòam thư" này
-#         body=json.dumps(message)    # Chuyển dict thành chuỗi string để gửi đi
-#     )
-    
-#     print(f"📢 Đã gửi tin nhắn thông báo Job {job_id} xong tới RabbitMQ")
-#     connection.close()
-
 import pika
 import json
 import time
 import logging
-from app.core.config import RABBIT_URL
+from app.config import RABBIT_URL
 
 logger = logging.getLogger(__name__)
 
