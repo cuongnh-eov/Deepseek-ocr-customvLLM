@@ -44,6 +44,8 @@ from worker.model_init import llm, sampling_params
 from app.services.publisher import send_finished_notification
 
 
+import fitz  # PyMuPDF để đọc PDF
+
 def update_job(db: Session, job: OCRJob, **kwargs):
     """
     Helper cập nhật job + updated_at rồi commit.
@@ -79,64 +81,82 @@ def process_one_job(job_id: str):
         output_dir = os.path.join(OUTPUT_PATH, job_id)
         os.makedirs(output_dir, exist_ok=True)
 
-        # 3. PDF -> Images
-        t_pdf2img0 = time.time()
-        images = pdf_to_images_high_quality(job.input_path)
-        t_pdf2img = time.time() - t_pdf2img0
-        total_pages = len(images)
+        # 3. Chuẩn bị Batching (Ý tưởng của sếp: 20 trang/lần)
+        temp_doc = fitz.open(job.input_path)
+        total_pages = len(temp_doc)
+        temp_doc.close()
 
-        # 4. AI Inference
-        t_pre0 = time.time()
-        batch_inputs = preprocess_batch(images, PROMPT)
-        t_preprocess = time.time() - t_pre0
-
-        t_inf0 = time.time()
-        outputs = generate_ocr(llm, batch_inputs, sampling_params)
-        t_infer = time.time() - t_inf0
-
-        # # 5. HẬU XỬ LÝ (Sử dụng lại logic JSON ổn định của bạn)
-        # t_post0 = time.time()
+        CHUNK_SIZE = 20
+        all_json_blocks = [] # Để Merger gộp sau này
+        full_raw_markdown = ""
+        full_clean_markdown = ""
         
-        # # 5.1) Tạo file Markdown
-        # # Lưu ý: Hàm này của bạn thường tự lưu vào output_dir
-        # markdown_text, _, _ = process_ocr_output(outputs, images, out_path=output_dir)
-        # markdown_path = os.path.join(output_dir, f"{job_id}.md")
-        # with open(markdown_path, "w", encoding="utf-8") as f:
-        #     f.write(markdown_text)
-        # 5. HẬU XỬ LÝ
+        t_pdf2img_total = 0
+        t_preprocess_total = 0
+        t_infer_total = 0
+
+        # --- BẮT ĐẦU CHẠY CUỐN CHIẾU ---
+        for i in range(0, total_pages, CHUNK_SIZE):
+            start = i
+            end = min(i + CHUNK_SIZE, total_pages)
+            print(f"📦 Processing Batch: {start+1} -> {end}")
+
+            # 3.1. PDF -> Images (Lazy Loading đúng 20 trang)
+            t_p_start = time.time()
+            # Lưu ý: Hàm pdf_to_images_high_quality cần được cập nhật start_page/end_page như đã hướng dẫn trước đó
+            images_chunk = pdf_to_images_high_quality(job.input_path, start_page=start, end_page=end)
+            t_pdf2img_total += (time.time() - t_p_start)
+
+            # 4.1. Preprocess Batch
+            t_pre_start = time.time()
+            batch_inputs = preprocess_batch(images_chunk, PROMPT)
+            t_preprocess_total += (time.time() - t_pre_start)
+
+            # 4.2. AI Inference
+            t_inf_start = time.time()
+            outputs = generate_ocr(llm, batch_inputs, sampling_params)
+            t_infer_total += (time.time() - t_inf_start)
+
+            # 5. HẬU XỬ LÝ CHO TỪNG BATCH
+            
+            # 5.1) Lấy bản RAW MARKDOWN
+            for out in outputs:
+                raw_text = out.outputs[0].text if hasattr(out, 'outputs') else str(out)
+                full_raw_markdown += raw_text + "\n\n<--- Page Split --->\n\n"
+
+            # 5.2) Lấy bản CLEAN MARKDOWN & Crop ảnh (Hàm của bạn sẽ crop ảnh vào output_dir/images)
+            clean_chunk_md, _, _ = process_ocr_output(outputs, images_chunk, out_path=output_dir)
+            full_clean_markdown += clean_chunk_md + "\n"
+
+            # 5.3) Thu thập blocks cho JSON Merger
+            for output in outputs:
+                raw_text = output.outputs[0].text if hasattr(output, 'outputs') else str(output)
+                cleaned = extract_content(raw_text, job_id)
+                blocks = process_ocr_to_blocks(cleaned)
+                all_json_blocks.append(blocks)
+
+            # GIẢI PHÓNG BỘ NHỚ SAU MỖI 20 TRANG
+            del images_chunk
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+        # --- KẾT THÚC VÒNG LẶP: LƯU TỔNG HỢP ---
         t_post0 = time.time()
-        
-        # --- LẤY BẢN RAW MARKDOWN (CHƯA CLEAN) ---
-        raw_markdown_text = ""
-        for out in outputs:
-            # Lấy text trực tiếp từ vLLM, giữ nguyên các tag <|ref|>, <|det|>
-            page_text = out.outputs[0].text if hasattr(out, 'outputs') else str(out)
-            raw_markdown_text += page_text + "\n\n<--- Page Split --->\n\n"
-        
+
         # Lưu file Raw Markdown
         raw_md_path = os.path.join(output_dir, f"{job_id}_raw.md")
         with open(raw_md_path, "w", encoding="utf-8") as f:
-            f.write(raw_markdown_text)
+            f.write(full_raw_markdown)
 
-        # --- LẤY BẢN CLEAN MARKDOWN (ĐÃ DỌN DẸP) ---
-        # Hàm này của bạn sẽ dọn dẹp nội dung và CROP ảnh lưu vào folder /images
-        clean_markdown_text, _, _ = process_ocr_output(outputs, images, out_path=output_dir)
-        
         # Lưu file Clean Markdown
         clean_md_path = os.path.join(output_dir, f"{job_id}.md")
         with open(clean_md_path, "w", encoding="utf-8") as f:
-            f.write(clean_markdown_text)
+            f.write(full_clean_markdown)
 
-        # 5.2) Tạo file JSON (Sử dụng logic từ file cũ bạn gửi)
+        # JSON Merger: Đánh số trang liên tục
         content_pages = []
-        for page_num, output in enumerate(outputs):
-            # Lấy text raw từ output của vLLM
-            raw_text = output.outputs[0].text if hasattr(output, 'outputs') else str(output)
-            # Làm sạch bằng hàm extract_content có sẵn trong file này
-            cleaned = extract_content(raw_text, job_id)
-            # Chuyển đổi sang blocks
-            blocks = process_ocr_to_blocks(cleaned)
-            content_pages.append({"page_number": page_num + 1, "blocks": blocks})
+        for page_idx, blocks in enumerate(all_json_blocks):
+            content_pages.append({"page_number": page_idx + 1, "blocks": blocks})
 
         response_data = {
             "document": {
@@ -153,33 +173,32 @@ def process_one_job(job_id: str):
         with open(json_path, "w", encoding="utf-8") as f:
             pyjson.dump(response_data, f, ensure_ascii=False, indent=2)
             f.flush()
-            os.fsync(f.fileno()) # Đảm bảo file được ghi xuống đĩa trước khi upload
+            os.fsync(f.fileno())
 
-        # 6. Tải lên MinIO (Sử dụng hàm quét toàn bộ thư mục của bạn)
-        print(f"🚀 Đang đẩy kết quả Job {job_id} lên MinIO...")
+        # 6. Tải lên MinIO (Quét folder chứa: images/, .md, _raw.md, .json)
+        print(f"🚀 Đang đẩy toàn bộ kết quả Job {job_id} lên MinIO...")
         upload_to_minio(output_dir, job_id)
 
         t_postprocess = time.time() - t_post0
         vram_peak_mb, vram_resv = read_gpu_peak_mb()
 
-        # 7. Cập nhật thành công
+        # 7. Cập nhật thành công vào Database
         update_job(
             db, job,
             status=JobStatus.SUCCESS,
             num_pages=total_pages,
             processing_time=round(time.time() - t0, 3),
             vram_peak_mb=vram_peak_mb,
-            t_pdf2img=round(t_pdf2img, 3),
-            t_preprocess=round(t_preprocess, 3),
-            t_infer=round(t_infer, 3),
+            t_pdf2img=round(t_pdf2img_total, 3),
+            t_preprocess=round(t_preprocess_total, 3),
+            t_infer=round(t_infer_total, 3),
             t_postprocess=round(t_postprocess, 3),
             result_path=f"{MINIO_ENDPOINT}/{MINIO_BUCKET_NAME}/{job_id}/{job_id}.md",
             minio_json_url=f"{MINIO_ENDPOINT}/{MINIO_BUCKET_NAME}/{job_id}/{job_id}.json"
         )
         
-        # 8. Thông báo (Nếu bạn đã sửa lỗi vhost RabbitMQ)
+        # 8. Thông báo qua RabbitMQ
         try:
-            from app.publisher import send_finished_notification
             send_finished_notification(job_id)
         except:
             pass
