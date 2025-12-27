@@ -94,15 +94,38 @@ def process_one_job(job_id: str):
         outputs = generate_ocr(llm, batch_inputs, sampling_params)
         t_infer = time.time() - t_inf0
 
-        # 5. HẬU XỬ LÝ (Sử dụng lại logic JSON ổn định của bạn)
+        # # 5. HẬU XỬ LÝ (Sử dụng lại logic JSON ổn định của bạn)
+        # t_post0 = time.time()
+        
+        # # 5.1) Tạo file Markdown
+        # # Lưu ý: Hàm này của bạn thường tự lưu vào output_dir
+        # markdown_text, _, _ = process_ocr_output(outputs, images, out_path=output_dir)
+        # markdown_path = os.path.join(output_dir, f"{job_id}.md")
+        # with open(markdown_path, "w", encoding="utf-8") as f:
+        #     f.write(markdown_text)
+        # 5. HẬU XỬ LÝ
         t_post0 = time.time()
         
-        # 5.1) Tạo file Markdown
-        # Lưu ý: Hàm này của bạn thường tự lưu vào output_dir
-        markdown_text, _, _ = process_ocr_output(outputs, images, out_path=output_dir)
-        markdown_path = os.path.join(output_dir, f"{job_id}.md")
-        with open(markdown_path, "w", encoding="utf-8") as f:
-            f.write(markdown_text)
+        # --- LẤY BẢN RAW MARKDOWN (CHƯA CLEAN) ---
+        raw_markdown_text = ""
+        for out in outputs:
+            # Lấy text trực tiếp từ vLLM, giữ nguyên các tag <|ref|>, <|det|>
+            page_text = out.outputs[0].text if hasattr(out, 'outputs') else str(out)
+            raw_markdown_text += page_text + "\n\n<--- Page Split --->\n\n"
+        
+        # Lưu file Raw Markdown
+        raw_md_path = os.path.join(output_dir, f"{job_id}_raw.md")
+        with open(raw_md_path, "w", encoding="utf-8") as f:
+            f.write(raw_markdown_text)
+
+        # --- LẤY BẢN CLEAN MARKDOWN (ĐÃ DỌN DẸP) ---
+        # Hàm này của bạn sẽ dọn dẹp nội dung và CROP ảnh lưu vào folder /images
+        clean_markdown_text, _, _ = process_ocr_output(outputs, images, out_path=output_dir)
+        
+        # Lưu file Clean Markdown
+        clean_md_path = os.path.join(output_dir, f"{job_id}.md")
+        with open(clean_md_path, "w", encoding="utf-8") as f:
+            f.write(clean_markdown_text)
 
         # 5.2) Tạo file JSON (Sử dụng logic từ file cũ bạn gửi)
         content_pages = []
