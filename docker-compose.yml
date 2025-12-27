@@ -1,39 +1,69 @@
 version: '3.8'
 
 services:
-  # --- Dịch vụ API ---
+  # --- 1. Database (PostgreSQL) ---
+  ocr-postgres:
+    image: postgres:15
+    container_name: ocr-postgres
+    environment:
+      - POSTGRES_USER=ocr_cuong
+      - POSTGRES_PASSWORD=ocr_cuong
+      - POSTGRES_DB=ocr_cuong_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # --- 2. Message Broker (RabbitMQ) ---
+  ocr-rabbit:
+    image: rabbitmq:3-management
+    container_name: ocr-rabbit
+    ports:
+      - "5672:5672"
+      - "15672:15672" # Web UI quản lý
+
+  # --- 3. Result Backend (Redis) ---
+  ocr-redis:
+    image: redis:7
+    container_name: ocr-redis
+    command: redis-server --requirepass infini_rag_flow
+    ports:
+      - "6379:6379"
+
+  # --- 4. FastAPI (Hệ thống tiếp nhận Job) ---
   api:
     build: .
-    image: ocr-system:latest
+    container_name: ocr-api
     ports:
       - "8001:8001"
     environment:
       - DATABASE_URL=postgresql+psycopg2://ocr_cuong:ocr_cuong@ocr-postgres:5432/ocr_cuong_db
-      - RABBIT_URL=amqp://guest:guest@ocr-rabbit:5672//
+      - RABBIT_URL=amqp://guest:guest@ocr-rabbit:5672/
       - REDIS_URL=redis://:infini_rag_flow@ocr-redis:6379/0
+      - PYTHONPATH=/app
     depends_on:
       - ocr-postgres
       - ocr-rabbit
       - ocr-redis
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
 
-  # --- Dịch vụ Worker (Chạy OCR nặng) ---
+  # --- 5. Celery Worker (Trái tim của hệ thống - Chạy DeepSeek-OCR) ---
   worker:
-    image: ocr-system:latest
+    build: .
+    container_name: ocr-worker
+    # Khớp lệnh chạy của bạn: -P solo để tránh phân mảnh VRAM
     command: celery -A app.core.celery_app worker --loglevel=info -P solo --concurrency=1
     environment:
       - DATABASE_URL=postgresql+psycopg2://ocr_cuong:ocr_cuong@ocr-postgres:5432/ocr_cuong_db
-      - RABBIT_URL=amqp://guest:guest@ocr-rabbit:5672//
+      - RABBIT_URL=amqp://guest:guest@ocr-rabbit:5672/
       - REDIS_URL=redis://:infini_rag_flow@ocr-redis:6379/0
       - PYTHONPATH=/app
-    depends_on:
-      - api
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+      # Config DeepSeek từ file của bạn
+      - MODEL_PATH=/app/DeepSeek-OCRR 
+      - MAX_CONCURRENCY=32
+    volumes:
+      - .:/app # Mount code và model vào container
+      - /home/cuongnh/OCR_docs:/home/cuongnh/OCR_docs # Mount folder chứa PDF/Output
     deploy:
       resources:
         reservations:
@@ -41,14 +71,8 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+    depends_on:
+      - ocr-rabbit
 
-  # --- Các dịch vụ nền (Database, Message Queue) ---
-  ocr-postgres:
-    image: postgres:15
-    # (Thêm cấu hình user/pass ở đây...)
-    
-  ocr-rabbit:
-    image: rabbitmq:3-management
-    
-  ocr-redis:
-    image: redis:7
+volumes:
+  postgres_data:
