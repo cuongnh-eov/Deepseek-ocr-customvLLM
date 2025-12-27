@@ -1,29 +1,46 @@
-# Hướng dẫn cài đặt và chạy chương trình DeepSeek OCR
+📑 DeepSeek-OCR Custom vLLM Deployment
+Dự án cung cấp giải pháp OCR tài chính chất lượng cao bằng model DeepSeek-OCR, được đóng gói hoàn toàn trong môi trường Docker để xử lý Batch Processing qua Celery & RabbitMQ.
 
-## 1. Clone dự án
+🚀 Tính năng nổi bật
+Gundam Mode: Tối ưu hóa độ phân giải ảnh (Crop-mode) cho các bảng tài chính phức tạp.
 
-Trước tiên, clone repository về máy của bạn:
+Asynchronous Workflow: Tách biệt API (FastAPI) và Worker (Celery) giúp hệ thống không bị treo khi xử lý PDF dài.
 
-```bash
+Resource Management: Tự động cấu hình VRAM và tối ưu hóa GPU qua Docker Nvidia Runtime.
+
+Production Ready: Triển khai nhanh chóng với 1 lệnh duy nhất.
+
+🛠 Yêu cầu hệ thống
+Hardware: NVIDIA GPU (Khuyên dùng 12GB VRAM trở lên cho chế độ Gundam).
+
+Driver: NVIDIA Container Toolkit đã được cài đặt.
+
+Software: Docker & Docker Compose.
+
+📥 Hướng dẫn cài đặt
+1. Clone Project
+Bash
+
 git clone https://github.com/cuongnh-eov/Deepseek-ocr-customvLLM.git
-cd TTS-01
-git clone https://github.com/deepseek-ai/DeepSeek-OCR.git
-cd DeepSeek-OCR-master/DeepSeek-OCR-vllm 
-conda create -n deepseek-ocr python=3.12.9 -y  
-conda activate deepseek-ocr   # môi trường conda
-wget https://github.com/vllm-project/vllm/releases/download/v0.8.5/vllm-0.8.5+cu118-cp38-abi3-manylinux1_x86_64.whl
-pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu118  
-pip install vllm-0.8.5+cu118-cp38-abi3-manylinux1_x86_64.whl 
-pip install -r requirements.txt  
-pip install flash-attn==2.7.3 --no-build-isolation
-3. Cài đặt các thư viện khác từ requirements.txt
-Tiếp theo, cài đặt tất cả các thư viện khác từ file requirements.txt:
-pip install -r requirements.txt
-4. Kiểm thử chương trình
-Chạy mô hình OCR
-Sau khi cài đặt xong, bạn có thể kiểm thử mô hình OCR bằng cách chạy lệnh dưới đây:
-cd TTS-01
-python app.model_runner.py
-Triển khai API
-Để triển khai API và sử dụng dịch vụ của chương trình, chạy lệnh sau:
-python app.main.py
+cd Deepseek-ocr-customvLLM
+2. Chuẩn bị Model
+Do kích thước model lớn, bạn cần copy folder model vào thư mục project:
+
+Bash
+
+# Đảm bảo cấu trúc như sau:
+# /Deepseek-ocr-customvLLM/DeepSeek-OCRR/<files_model>
+3. Khởi chạy hệ thống
+Sử dụng Docker Compose để tự động xây dựng môi trường và kết nối các dịch vụ:
+
+Bash
+
+docker-compose up --build
+📋 Luồng thực thi (Architecture Flow)
+Client gửi file PDF/Image qua Endpoint POST /process.
+
+API lưu file vào MinIO và đẩy Task ID vào RabbitMQ.
+
+Worker (Celery) nhận task, gọi DeepSeek-OCR (GPU) để chuyển đổi sang Markdown/JSON.
+
+Result được cập nhật vào Postgres và gửi thông báo hoàn tất.
