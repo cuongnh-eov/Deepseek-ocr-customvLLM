@@ -155,3 +155,64 @@ def read_gpu_peak_mb() -> Tuple[Optional[int], Optional[int]]:
     peak_resv = int(torch.cuda.max_memory_reserved() / (1024 * 1024))
     return peak_alloc, peak_resv
 
+
+
+
+
+import re
+
+def apply_regex_heuristics(text: str) -> str:
+    if not text or not text.strip():
+        return text
+    
+    date_pattern = r"(\d{1,2}/\d{1,2}/\d{4})"
+    match = re.search(date_pattern, text)
+    if match:
+        start, end = match.span()
+        prefix = text[:start].strip()
+        date_val = match.group(1)
+        suffix = text[end:].strip()
+        
+        parts = []
+        if prefix: parts.append(prefix)
+        parts.append(date_val)
+        if suffix: parts.append(suffix)
+        return " | ".join(parts)
+    
+    # Tách số dính chữ an toàn
+    return re.sub(r'([a-zA-Z])(\d)', r'\1 | \2', text)
+
+def validate_financial_rows(rows: list) -> str:
+    try:
+        data_values = []
+        total_value = 0
+        has_total_row = False
+
+        for row in rows:
+            # Join các cột, bỏ dấu phân cách
+            row_str = " ".join(row).replace('.', '').replace(',', '')
+            # Tìm tất cả số
+            nums = re.findall(r'[-+]?\d+', row_str)
+            
+            # KIỂM TRA AN TOÀN: Nếu hàng không có số nào thì bỏ qua
+            if not nums: 
+                continue
+            
+            # Lấy số cuối cùng an toàn
+            current_val = int(nums[-1])
+
+            if any(kw in row_str.lower() for kw in ["cộng", "tổng cộng", "total"]):
+                total_value = current_val
+                has_total_row = True
+            else:
+                data_values.append(current_val)
+
+        if has_total_row and data_values:
+            calculated_sum = sum(data_values)
+            if abs(calculated_sum - total_value) > 2:
+                return "Low Confidence Table (Column Shift Detected)"
+        
+        return "High"
+    except (ValueError, IndexError, Exception):
+        # Trả về Indeterminate thay vì làm sập cả Job
+        return "Indeterminate"
