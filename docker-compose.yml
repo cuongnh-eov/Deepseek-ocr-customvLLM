@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  # --- Dịch vụ API ---
+  api:
+    build: .
+    image: ocr-system:latest
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://ocr_cuong:ocr_cuong@ocr-postgres:5432/ocr_cuong_db
+      - RABBIT_URL=amqp://guest:guest@ocr-rabbit:5672//
+      - REDIS_URL=redis://:infini_rag_flow@ocr-redis:6379/0
+    depends_on:
+      - ocr-postgres
+      - ocr-rabbit
+      - ocr-redis
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # --- Dịch vụ Worker (Chạy OCR nặng) ---
+  worker:
+    image: ocr-system:latest
+    command: celery -A app.core.celery_app worker --loglevel=info -P solo --concurrency=1
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://ocr_cuong:ocr_cuong@ocr-postgres:5432/ocr_cuong_db
+      - RABBIT_URL=amqp://guest:guest@ocr-rabbit:5672//
+      - REDIS_URL=redis://:infini_rag_flow@ocr-redis:6379/0
+      - PYTHONPATH=/app
+    depends_on:
+      - api
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # --- Các dịch vụ nền (Database, Message Queue) ---
+  ocr-postgres:
+    image: postgres:15
+    # (Thêm cấu hình user/pass ở đây...)
+    
+  ocr-rabbit:
+    image: rabbitmq:3-management
+    
+  ocr-redis:
+    image: redis:7
