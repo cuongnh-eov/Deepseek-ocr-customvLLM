@@ -63,3 +63,5 @@ DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql+psycopg2://ocr_cuong:ocr_cu
 
 
 _IMAGE_TOKEN = "<image>"
+
+CHUNK_SIZE = 40

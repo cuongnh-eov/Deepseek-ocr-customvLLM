@@ -1,29 +1,3 @@
-# #!/usr/bin/env bash
-# export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-# echo "🧹 Đang dọn dẹp các tiến trình cũ..."
-# pkill -f uvicorn
-# pkill -f celery
-
-# echo "🐳 Đang khởi động các dịch vụ Docker..."
-# # Thêm ocr-redis vào danh sách start
-# docker start ocr-postgres ocr-rabbit ocr-redis 2>/dev/null
-
-# # Chờ 3 giây để Docker khởi động hẳn
-# sleep 3
-
-# # Các biến môi trường
-# export DATABASE_URL="postgresql+psycopg2://ocr_cuong:ocr_cuong@localhost:5432/ocr_cuong_db"
-# export RABBIT_URL="amqp://guest:guest@localhost:5672//"
-# export REDIS_URL="redis://:infini_rag_flow@127.0.0.1:6379/0"
-
-# echo "🚀 Khởi chạy API và Worker..."
-# uvicorn app.main:app --host 0.0.0.0 --port 8001 &
-# celery -A app.tasks worker --loglevel=info -P solo 
-# # --concurrency=1
-
-
-#!/usr/bin/env bash
-
 # 1. Cấu hình GPU và Python Path
 #!/usr/bin/env bash
 

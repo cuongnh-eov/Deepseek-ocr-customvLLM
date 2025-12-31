@@ -38,7 +38,7 @@ from app.services.processor import preprocess_batch, generate_ocr
 
 # 8. Khởi tạo Model (LLM)
 # Lưu ý: Điều chỉnh path này tùy vào vị trí file model_init.py của bạn
-from worker.model_init import llm, sampling_params 
+from app.core.model_init import llm, sampling_params 
 
 # 9. Dịch vụ thông báo (RabbitMQ Publisher)
 from app.services.publisher import send_finished_notification
@@ -86,7 +86,7 @@ def process_one_job(job_id: str):
         total_pages = len(temp_doc)
         temp_doc.close()
 
-        CHUNK_SIZE = 20
+        from app.config import CHUNK_SIZE
         all_json_blocks = [] # Để Merger gộp sau này
         full_raw_markdown = ""
         full_clean_markdown = ""
