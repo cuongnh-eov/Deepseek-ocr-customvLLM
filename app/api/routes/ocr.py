@@ -120,21 +120,93 @@ def get_job_status(job_id: str, db: Session = Depends(get_db)):
         "error": job.error
     }
 
+from minio.deleteobjects import DeleteObject
+from minio import Minio # Giả sử bạn dùng thư viện minio
+from app.config import MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME
+# Khởi tạo client (nên để trong file config hoặc dependency)
+endpoint = MINIO_ENDPOINT.replace("http://", "").replace("https://", "")
+
+minio_client = Minio(
+    endpoint,
+    access_key=MINIO_ACCESS_KEY,
+    secret_key=MINIO_SECRET_KEY,
+    secure=False
+)
 
 @ocr_router.delete("/documents/{id}")
 def delete_document(id: str, db: Session = Depends(get_db)):
-    """Xóa tài liệu và dữ liệu liên quan"""
+    """
+    Xóa tài liệu:
+    1. Tìm trong DB.
+    2. Xóa tất cả object trên MinIO có prefix là Job ID.
+    3. Xóa thư mục/file cục bộ (nếu có).
+    4. Xóa bản ghi trong DB.
+    """
+    # 1. Kiểm tra tồn tại trong Database
     job = db.query(OCRJob).filter(OCRJob.job_id == id).first()
     if not job:
-        raise HTTPException(status_code=404, detail="Tài liệu không tồn tại.")
+        raise HTTPException(status_code=404, detail="Tài liệu không tồn tại trong Database.")
 
+    # 2. XÓA TRÊN MINIO (Sử dụng MINIO_BUCKET_NAME đã import)
+    try:
+        # Prefix thường là ID của tài liệu/job
+        prefix = f"{id}/"
+        
+        # Lấy danh sách tất cả file bên trong "thư mục" này
+        objects_to_delete = minio_client.list_objects(
+            MINIO_BUCKET_NAME, 
+            prefix=prefix, 
+            recursive=True
+        )
+        
+        # Chuyển đổi danh sách để xóa hàng loạt
+        delete_list = [DeleteObject(obj.object_name) for obj in objects_to_delete]
+        
+        if delete_list:
+            # Lưu ý: remove_objects trả về một iterator, phải duyệt qua nó thì lệnh xóa mới thực thi
+            errors = minio_client.remove_objects(MINIO_BUCKET_NAME, delete_list)
+            for error in errors:
+                print(f"❌ Lỗi khi xóa object {error.object_name} trên MinIO: {error}")
+            print(f"✅ Đã xóa các tệp trên MinIO tại prefix: {prefix}")
+        else:
+            print(f"ℹ️ Không tìm thấy tệp nào trên MinIO với prefix: {prefix}")
+
+    except Exception as e:
+        print(f"❌ Lỗi kết nối hoặc xử lý MinIO: {str(e)}")
+
+    # 3. XÓA TRÊN LOCAL STORAGE
+    # Xóa thư mục output cục bộ
     if job.output_dir and os.path.exists(job.output_dir):
-        shutil.rmtree(job.output_dir)
+        try:
+            shutil.rmtree(job.output_dir)
+            print(f"✅ Đã xóa thư mục cục bộ: {job.output_dir}")
+        except Exception as e:
+            print(f"❌ Lỗi xóa output_dir: {e}")
 
+    # Xóa file input cục bộ
     if job.input_path and os.path.exists(job.input_path):
-        os.remove(job.input_path)
+        try:
+            if os.path.isfile(job.input_path):
+                os.remove(job.input_path)
+                print(f"✅ Đã xóa file input cục bộ: {job.input_path}")
+        except Exception as e:
+            print(f"❌ Lỗi xóa input_path: {e}")
 
-    db.delete(job)
-    db.commit()
+    # 4. XÓA TRONG DATABASE
+    try:
+        db.delete(job)
+        db.commit()
+        print(f"✅ Đã xóa bản ghi Job ID {id} trong DB.")
+    except Exception as e:
+        db.rollback()
+        print(f"❌ Lỗi Database: {str(e)}")
+        raise HTTPException(status_code=500, detail="Lỗi khi xóa dữ liệu trong Database.")
 
-    return {"message": f"Đã xóa hoàn toàn dữ liệu của Job ID: {id}"}
+    return {
+        "status": "success",
+        "message": f"Dữ liệu của Job ID {id} đã được dọn dẹp sạch sẽ.",
+        "details": {
+            "minio_bucket": MINIO_BUCKET_NAME,
+            "minio_prefix": f"{id}/"
+        }
+    }

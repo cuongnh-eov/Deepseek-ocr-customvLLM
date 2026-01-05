@@ -18,31 +18,47 @@ from pytesseract import Output
 from PIL import Image  
 
 
-def crop_pixels_all_sides(image, crop_pixels=60):  
-    """Crop specified pixels from all four sides of the image  
+def crop_flexible_pixels(pil_image):  
+    """  
+    Cắt lề ảnh với các thông số lề được cố định bên trong hàm.
+    (Mặc định: Trái 85, Trên 85, Phải 85, Dưới 85 px ~ 1.5cm ở 144 DPI)
       
     Args:  
-        image: PIL Image object  
-        crop_pixels: Number of pixels to crop from each side (default: 100)  
-      
+        pil_image: PIL.Image object  
+          
     Returns:  
-        PIL Image: Cropped image  
+        PIL.Image: Ảnh đã được cắt theo thông số cố định
     """  
-    width, height = image.size  
-      
-    # Crop specified pixels from each side  
-    left = crop_pixels  
-    top = crop_pixels  
-    right = width - crop_pixels  
-    bottom = height - crop_pixels  
-      
-    # Ensure we don't crop beyond image boundaries  
-    if left >= right or top >= bottom:  
-        print("Warning: Crop values exceed image dimensions")  
-        return image  
-      
-    return image.crop((left, top, right, bottom))
-  
+    try:  
+        # Cấu hình thông số cố định tại đây
+        left = 60
+        top = 60
+        right = 60
+        bottom = 60
+
+        # 1. Đảm bảo ảnh ở định dạng RGB (loại bỏ Alpha channel của PNG nếu có)
+        if pil_image.mode in ("RGBA", "P"):
+            pil_image = pil_image.convert("RGB")
+            
+        width, height = pil_image.size  
+        
+        # 2. Tính toán tọa độ vùng giữ lại
+        left_coord = left
+        top_coord = top
+        right_coord = width - right
+        bottom_coord = height - bottom
+          
+        # 3. Kiểm tra logic an toàn
+        if left_coord < right_coord and top_coord < bottom_coord:
+            # Thực hiện cắt và trả về kết quả
+            return pil_image.crop((left_coord, top_coord, right_coord, bottom_coord))
+        else:
+            print(f"Warning: Vùng crop lấn át kích thước ảnh ({width}x{height})")
+            return pil_image
+              
+    except Exception as e:      
+        print(f"Lỗi khi crop ảnh: {e}")  
+        return pil_image
 
 def detect_and_correct_skew(pil_image):  
     """  

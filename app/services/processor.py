@@ -7,19 +7,20 @@ from app.utils.postprocess_md import process_single_image
 from app.config import NUM_WORKERS
 
 def preprocess_batch(images, prompt):
-    """
-    Tiền xử lý hàng loạt ảnh bằng đa luồng (CPU intensive)
-    """
-    # Sử dụng ThreadPoolExecutor giúp tận dụng đa nhân CPU khi resize/padding ảnh
     with ThreadPoolExecutor(max_workers=NUM_WORKERS) as executor:
-        batch_inputs = list(tqdm(
+        # results sẽ là danh sách các bộ (cache_item, image)
+        results = list(tqdm(
             executor.map(lambda image: process_single_image(image, prompt), images),
             total=len(images),
             desc="🚀 Pre-processing images",
-            leave=False # Đảm bảo thanh tqdm biến mất sau khi xong để log sạch hơn
+            leave=False 
         ))
     
-    return batch_inputs
+    # TÁCH RIÊNG 2 DANH SÁCH TỪ results
+    batch_inputs = [r[0] for r in results]   # Đây là cái cũ bạn cần giữ nguyên
+    processed_images = [r[1] for r in results] # Đây là cái mới để dùng cho vẽ BBox
+    
+    return batch_inputs, processed_images # Trả về cả cũ và mới
 
 def generate_ocr(llm, batch_inputs, sampling_params):
     """

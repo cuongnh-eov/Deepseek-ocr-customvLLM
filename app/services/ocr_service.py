@@ -109,7 +109,7 @@ def process_one_job(job_id: str):
 
             # 4.1. Preprocess Batch
             t_pre_start = time.time()
-            batch_inputs = preprocess_batch(images_chunk, PROMPT)
+            batch_inputs, processed_images = preprocess_batch(images_chunk, PROMPT)
             t_preprocess_total += (time.time() - t_pre_start)
 
             # 4.2. AI Inference
@@ -125,7 +125,7 @@ def process_one_job(job_id: str):
                 full_raw_markdown += raw_text + "\n\n<--- Page Split --->\n\n"
 
             # 5.2) Lấy bản CLEAN MARKDOWN & Crop ảnh (Hàm của bạn sẽ crop ảnh vào output_dir/images)
-            clean_chunk_md, _, _ = process_ocr_output(outputs, images_chunk, out_path=output_dir)
+            clean_chunk_md, _, _ = process_ocr_output(outputs, processed_images, out_path=output_dir)
             full_clean_markdown += clean_chunk_md + "\n"
 
             # 5.3) Thu thập blocks cho JSON Merger
