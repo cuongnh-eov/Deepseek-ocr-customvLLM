@@ -1,0 +1,65 @@
+# docker-compose.services.yml
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: ocr-api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001
+    ports:
+      - "8001:8001"
+    environment:
+      # ✅ SỬA: Dùng container_name từ infra (ocr-postgres, ocr-rabbit, ocr-redis, ocr-minio)
+      - DATABASE_URL=postgresql+psycopg2://ocr_cuong:ocr_cuong@ocr-postgres:5432/ocr_cuong_db
+      - RABBIT_URL=amqp://guest:guest@ocr-rabbit:5672//
+      - REDIS_URL=redis://:infini_rag_flow@ocr-redis:6379/0
+      - MINIO_ENDPOINT=http://ocr-minio:9000
+      - MINIO_ACCESS_KEY=rag_flow
+      - MINIO_SECRET_KEY=infini_rag_flow
+      - MINIO_BUCKET_NAME=ocr-results
+      # ✅ SỬA: Path trong container, không phải path trên host
+      - MODEL_PATH=/models/DeepSeek-OCRR
+    volumes:
+      - .:/app
+      # Mount model từ host vào container
+      - /home/cuongnh/PycharmProjects/TTTS_01/DeepSeek-OCRR:/models/DeepSeek-OCRR
+    networks:
+      - ocr-network
+    restart: always
+
+  worker:
+    build: .
+    container_name: ocr-worker
+    command: celery -A app.core.celery_app worker --loglevel=info -P solo --concurrency=1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      # ✅ SỬA: Dùng container_name
+      - DATABASE_URL=postgresql+psycopg2://ocr_cuong:ocr_cuong@ocr-postgres:5432/ocr_cuong_db
+      - RABBIT_URL=amqp://guest:guest@ocr-rabbit:5672//
+      - REDIS_URL=redis://:infini_rag_flow@ocr-redis:6379/0
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+      - MINIO_ENDPOINT=http://ocr-minio:9000
+      - MINIO_ACCESS_KEY=rag_flow
+      - MINIO_SECRET_KEY=infini_rag_flow
+      - MINIO_BUCKET_NAME=ocr-results
+      # ✅ SỬA: Path trong container
+      - MODEL_PATH=/models/DeepSeek-OCRR
+      - TRITON_PTXAS_PATH=/usr/local/cuda-11.8/bin/ptxas
+    volumes:
+      - .:/app
+      # Mount model từ host vào container
+      - /home/cuongnh/PycharmProjects/TTTS_01/DeepSeek-OCRR:/models/DeepSeek-OCRR
+    networks:
+      - ocr-network
+    restart: always
+
+networks:
+  ocr-network:
+    external: true
+    name: ocr-network

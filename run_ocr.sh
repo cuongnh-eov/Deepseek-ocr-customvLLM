@@ -45,7 +45,7 @@ run_service "ocr-redis"
 run_service "ocr-minio" # Đã thêm MinIO vào đây
 
 echo "⏳ Chờ 10 giây để các dịch vụ Docker sẵn sàng..."
-sleep 10
+sleep 5
 
 # 2. Các biến môi trường (Khớp với cấu hình Docker ở trên)
 export DATABASE_URL="postgresql+psycopg2://ocr_cuong:ocr_cuong@localhost:5432/ocr_cuong_db"

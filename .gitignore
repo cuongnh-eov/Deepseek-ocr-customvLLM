@@ -72,6 +72,7 @@ data/
 res/
 outputs/
 uploads/
+wheels/
 
 # nếu bạn cũng muốn bỏ luôn output xử lý thì mở comment dòng dưới:
 
