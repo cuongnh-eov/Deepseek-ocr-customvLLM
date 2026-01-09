@@ -196,7 +196,7 @@ def process_one_job(job_id: str):
             result_path=f"{MINIO_ENDPOINT}/{MINIO_BUCKET_NAME}/{job_id}/{job_id}.md",
             minio_json_url=f"{MINIO_ENDPOINT}/{MINIO_BUCKET_NAME}/{job_id}/{job_id}.json"
         )
-        
+   #     
         # 8. Thông báo qua RabbitMQ
         try:
             send_finished_notification(job_id)
