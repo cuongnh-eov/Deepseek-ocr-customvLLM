@@ -74,3 +74,4 @@ outlines==0.1.11
 # --- Monitoring (optional) ---
 prometheus-fastapi-instrumentator==7.1.0
 prometheus_client==0.23.1
+python-dotenv

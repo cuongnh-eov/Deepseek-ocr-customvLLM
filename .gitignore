@@ -1,5 +1,15 @@
 # =========================
 
+# Environment variables
+
+# =========================
+
+.env
+.env.local
+.env.*.local
+
+# =========================
+
 # Python cache / bytecode
 
 # =========================
@@ -96,3 +106,4 @@ corpus_manifest.csv
 
 runapi.sh
 runwoker.sh
+.env
