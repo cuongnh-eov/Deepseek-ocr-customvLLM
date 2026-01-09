@@ -173,7 +173,7 @@ def parse_html_table(html_string: str) -> List[List[str]]:
 #     return blocks
 
 
-
+#
 from typing import List, Dict, Any
 from app.utils.utils import apply_regex_heuristics, validate_financial_rows # Import từ utils
 
