@@ -164,7 +164,7 @@ def draw_bounding_boxes(image, refs, jdx, out_path):
 #                             print(f"Lỗi crop tại trang {jdx}: {e}")
 #     return image
 
-
+#
 def process_single_image(image, prompt):
     # print("trung binh anh size:", image.size)
     image = detect_and_correct_skew(image)   #them xu ly anh nghieng  
