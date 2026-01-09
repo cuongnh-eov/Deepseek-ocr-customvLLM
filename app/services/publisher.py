@@ -10,7 +10,7 @@ def send_finished_notification(job_id: str):
     """
     Gửi thông báo hoàn tất Job tới hàng đợi 'job_finished'.
     Dùng để UI hoặc các service khác cập nhật trạng thái thời gian thực.
-    """
+    """#
     connection = None
     try:
         # 1. Kết nối đến RabbitMQ dùng URL từ config
