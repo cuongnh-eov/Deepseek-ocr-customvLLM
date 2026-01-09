@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 def process_ocr_document_task(self, job_id: str):
     """
     Task Celery để điều phối xử lý OCR.
-    """
+    """#
     try:
         # 1. Đảm bảo môi trường Python tìm thấy các module trong dự án
         project_root = os.getcwd()
