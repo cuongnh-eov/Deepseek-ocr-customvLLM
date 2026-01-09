@@ -16,7 +16,7 @@ class JobStatus(enum.Enum):
     SUCCESS = "SUCCESS" # Xử lý thành công
     FAILED = "FAILED" # Xử lý thất bại
 
-
+#
 class OCRJob(Base):
     __tablename__ = "ocr_jobs"
 
