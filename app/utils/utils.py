@@ -66,7 +66,7 @@ class Colors:
     
 #     pdf_document.close()
 #     return images
-
+#
 def pdf_to_images_high_quality(pdf_path, dpi=144, image_format="PNG", start_page=0, end_page=None):
     images = []
     pdf_document = fitz.open(pdf_path)
