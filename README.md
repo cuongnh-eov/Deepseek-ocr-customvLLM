@@ -44,7 +44,7 @@ docker logs -f ocr-worker
 ### Local Development
 
 ```bash
-# Setup
+# Setup#
 conda create -n ocr python=3.12 -y
 conda activate ocr
 
