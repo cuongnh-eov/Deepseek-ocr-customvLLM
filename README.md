@@ -1,389 +1,190 @@
-# 🚀 Advanced OCR Pipeline & Distributed Processing System
+# 🚀 DeepSeek OCR System
 
-Hệ thống xử lý OCR tài liệu nâng cao, tích hợp trí tuệ nhân tạo (DeepSeek-OCR) và kiến trúc phân tán (Celery + RabbitMQ + MinIO) để chuyển đổi PDF/Hình ảnh sang Markdown chất lượng cao.
+Hệ thống OCR phân tán, chuyển đổi PDF/ảnh sang Markdown bằng DeepSeek-OCR + vLLM.
 
----
+## 🎯 Tính năng
 
-## 📑 Mục lục
+- **AI-Powered OCR**: DeepSeek-OCR với vLLM optimization (~760 tokens/s)
+- **Distributed Processing**: Celery + RabbitMQ + MinIO
+- **Async Jobs**: FastAPI + Celery worker pattern
+- **GPU Optimized**: CUDA 11.8, Flash-Attention, KV Cache
+- **LaTeX Support**: Nhận diện công thức toán học
+- **Layout Aware**: Duy trì cấu trúc tài liệu
 
-- [Tính năng nổi bật](#-tính-năng-nổi-bật)
-- [Công nghệ sử dụng](#-công-nghệ-sử-dụng)
-- [Cấu trúc dự án](#-cấu-trúc-dự-án)
-- [Cài đặt & Chạy](#-cài-đặt--chạy)
-  - [Chạy Local](#-chạy-local)
-  - [Chạy Docker](#-chạy-docker)
-- [Kết nối từ máy khác](#-kết-nối-từ-máy-khác)
-- [API Endpoints](#-api-endpoints)
-- [Hiệu suất](#-hiệu-suất)
+## 🏗 Tech Stack
 
----
+| Layer | Tech |
+|-------|------|
+| Backend | FastAPI, Celery |
+| AI/ML | DeepSeek-OCR, vLLM, PyTorch, CUDA 11.8 |
+| Queue | RabbitMQ, Redis |
+| Storage | MinIO, PostgreSQL |
+| DevOps | Docker, Docker Compose |
 
-## 🌟 Tính năng nổi bật
+## 📦 Quick Start
 
-### 1. Xử lý thị giác máy tính (Computer Vision)
-
-| Tính năng | Mô tả |
-|-----------|-------|
-| **Deskewing & Orientation** | Tự động nhận diện góc nghiêng và xoay trang giấy về trạng thái thẳng |
-| **Coordinate Mapping** | Chuyển đổi tọa độ từ hệ chuẩn AI sang kích thước thực tế của ảnh gốc |
-| **Smart Cropping** | Tự động cắt hình ảnh và bảng biểu, lọc ảnh rỗng và box diện tích = 0 |
-
-### 2. Trí tuệ nhân tạo & OCR (AI Engine)
-
-| Tính năng | Mô tả |
-|-----------|-------|
-| **DeepSeek-OCR** | Mô hình ngôn ngữ thị giác mạnh mẽ cho văn bản phức tạp |
-| **LaTeX Support** | Nhận diện và trích xuất công thức toán học chính xác |
-| **Layout Awareness** | Duy trì cấu trúc tài liệu, phân cấp Heading xuyên suốt các trang |
-| **vLLM Optimization** | Tối ưu GPU với Batch Processing và KV Cache (>700 tokens/s) |
-
-### 3. Kiến trúc phân tán (Distributed Architecture)
-
-| Thành phần | Mô tả |
-|------------|-------|
-| **Celery + RabbitMQ** | Task queue bất đồng bộ, xử lý hàng trăm file cùng lúc |
-| **MinIO** | Object storage S3-compatible lưu trữ kết quả |
-| **Real-time Notification** | Tự động thông báo qua RabbitMQ khi hoàn tất Job |
-
----
-
-## 🏗 Công nghệ sử dụng
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                                                                             │
-│   Backend        │  FastAPI, Celery, RabbitMQ                              │
-│   AI/ML          │  DeepSeek-OCR, vLLM, PyTorch, CUDA 11.8                 │
-│   Image          │  OpenCV, Pillow, Tesseract, PyMuPDF                     │
-│   Storage        │  MinIO, PostgreSQL, Redis                               │
-│   DevOps         │  Docker, Docker Compose                                  │
-│   Language       │  Python 3.12                                             │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 📁 Cấu trúc dự án
-
-```
-Deepseek-ocr-customvLLM/
-├── app/
-│   ├── main.py                 # FastAPI entry point
-│   ├── core/
-│   │   ├── celery_app.py       # Celery configuration
-│   │   ├── ocr_engine.py       # vLLM + DeepSeek OCR
-│   │   └── config.py           # Environment config
-│   ├── services/
-│   │   ├── ocr_service.py      # OCR processing logic
-│   │   └── publisher.py        # RabbitMQ notification
-│   └── tasks/
-│       └── tasks.py            # Celery tasks
-├── configs/
-│   └── config.py               # Model & system config
-├── docker-compose.infra.yml    # Infra services (DB, Redis, RabbitMQ, MinIO)
-├── docker-compose.services.yml # App services (API, Worker)
-├── Dockerfile                  # Docker image build
-├── requirements.txt            # Python dependencies
-├── run_ocr.sh                  # Local run script
-└── wheels/
-    └── vllm-0.8.5+cu118-*.whl  # vLLM wheel for CUDA 11.8
-```
-
----
-
-## 🚀 Cài đặt & Chạy
-
-### Prerequisites
-
-- **GPU:** NVIDIA GPU với CUDA 11.8+ (RTX 3060 hoặc cao hơn)
-- **RAM:** 16GB+ recommended
-- **Disk:** 50GB+ cho model và data
-- **Docker:** Docker Engine 20.10+ với NVIDIA Container Toolkit
-
----
-
-### 🖥 Chạy Local
-
-#### 1. Tạo môi trường Conda
+### Docker (Recommended)
 
 ```bash
-conda create -n Vllm python=3.12 -y
-conda activate Vllm
+# 1. Chuẩn bị .env
+cp .env.example .env
+# Edit .env với giá trị của bạn
+
+# 2. Start infrastructure
+docker-compose -f docker-compose.infra.yml up -d
+
+# 3. Start services
+docker-compose -f docker-compose.services.yml up -d
+
+# 4. Check status
+docker ps
+docker logs -f ocr-worker
 ```
 
-#### 2. Cài đặt dependencies
+### Local Development
 
 ```bash
-# PyTorch với CUDA 11.8
-pip install torch==2.6.0+cu118 torchvision==0.21.0+cu118 torchaudio==2.6.0+cu118 \
+# Setup
+conda create -n ocr python=3.12 -y
+conda activate ocr
+
+# Install PyTorch
+pip install torch==2.6.0+cu118 torchvision==0.21.0+cu118 \
     --index-url https://download.pytorch.org/whl/cu118
 
-# vLLM wheel
+# Install vLLM wheel
 pip install ./wheels/vllm-0.8.5+cu118-cp38-abi3-manylinux1_x86_64.whl
 
-# xformers & flash-attn
-pip install xformers==0.0.29.post2 --index-url https://download.pytorch.org/whl/cu118
-pip install flash-attn==2.7.3 --no-build-isolation
-
-# Các dependencies còn lại
+# Install deps
 pip install -r requirements.txt
-```
 
-#### 3. Chạy hệ thống
-
-```bash
-# Cấp quyền thực thi
+# Run
 chmod +x run_ocr.sh
-
-# Chạy (tự động start Docker containers cho infra + chạy API & Worker)
 ./run_ocr.sh
 ```
 
-#### 4. Kiểm tra
+## 📡 Services
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| API | 8001 | FastAPI endpoint |
+| RabbitMQ | 5672 | Message queue |
+| RabbitMQ Console | 15672 | Web UI |
+| Redis | 6379 | Cache |
+| PostgreSQL | 5432 | Database |
+| MinIO API | 9000 | Object storage |
+| MinIO Console | 9001 | Web UI |
+
+## 🔌 API Endpoints
 
 ```bash
-# API docs
-curl http://localhost:8001/docs
+# Docs
+GET /docs
 
-# Health check
-curl http://localhost:8001/health
+# Health
+GET /health
+
+# Upload file
+POST /ocr/upload
+
+# Check status
+GET /ocr/status/{job_id}
+
+# Get result
+GET /ocr/result/{job_id}
 ```
 
----
+## 📁 Project Structure
 
-### 🐳 Chạy Docker
+```
+app/
+├── main.py              # FastAPI entry
+├── core/
+│   ├── celery_app.py    # Celery config
+│   ├── ocr_engine.py    # vLLM + DeepSeek
+│   └── config.py        # Settings
+├── services/            # Business logic
+└── tasks/               # Celery tasks
 
-#### 1. Chuẩn bị wheel vLLM
-
-```bash
-mkdir -p ./wheels
-cp /path/to/vllm-0.8.5+cu118-cp38-abi3-manylinux1_x86_64.whl ./wheels/
+docker-compose.infra.yml    # Infrastructure
+docker-compose.services.yml # App services
+.env                        # Configuration (secrets)
+.env.example                # Configuration template
 ```
 
-#### 2. Khởi động hạ tầng (Infra)
+## ⚙️ Configuration
 
-```bash
-docker compose -f docker-compose.infra.yml up -d
+All config via `.env`:
+
+```env
+# Database
+POSTGRES_USER=ocr_cuong
+POSTGRES_PASSWORD=your_password
+POSTGRES_DB=ocr_cuong_db
+
+# Model
+MODEL_PATH=/models/DeepSeek-OCRR
+
+# Storage
+MINIO_ENDPOINT=http://ocr-minio:9000
+MINIO_ACCESS_KEY=rag_flow
+MINIO_SECRET_KEY=your_secret_key
+
+# Message Queue
+RABBIT_URL=amqp://guest:guest@ocr-rabbit:5672/
+
+# Cache
+REDIS_URL=redis://:password@ocr-redis:6379/0
 ```
 
-Chờ 15 giây để các services sẵn sàng:
+## 🐳 Docker Commands
 
 ```bash
-sleep 15
-docker ps
-```
-
-**Các containers sẽ chạy:**
-
-| Container | Port | Mô tả |
-|-----------|------|-------|
-| ocr-postgres | 5432 | PostgreSQL Database |
-| ocr-rabbit | 5672, 15672 | RabbitMQ Message Broker |
-| ocr-redis | 6379 | Redis Cache |
-| ocr-minio | 9000, 9001 | MinIO Object Storage |
-
-#### 3. Build và chạy Services
-
-```bash
-docker compose -f docker-compose.services.yml up -d --build
-```
-
-**Các containers sẽ chạy:**
-
-| Container | Port | Mô tả |
-|-----------|------|-------|
-| ocr-api | 8001 | FastAPI Server |
-| ocr-worker | - | Celery Worker (GPU) |
-
-#### 4. Kiểm tra logs
-
-```bash
-# Xem tất cả containers
-docker ps
-
-# Xem log API
+# View logs
+docker logs -f ocr-worker
 docker logs -f ocr-api
 
-# Xem log Worker
-docker logs -f ocr-worker
-
-# Kiểm tra GPU trong worker
+# Check GPU
 docker exec -it ocr-worker nvidia-smi
+
+# Stop all
+docker-compose -f docker-compose.services.yml down
+docker-compose -f docker-compose.infra.yml down
+
+# Clean everything (⚠️ removes data)
+docker-compose -f docker-compose.infra.yml down -v
 ```
 
-#### 5. Dừng hệ thống
-
-```bash
-# Dừng services
-docker compose -f docker-compose.services.yml down
-
-# Dừng infra (giữ data)
-docker compose -f docker-compose.infra.yml down
-
-# Dừng infra và XÓA data
-docker compose -f docker-compose.infra.yml down -v
-```
-
----
-
-## 📡 Kết nối từ máy khác
-
-### Thông tin kết nối (LAN)
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                                                                             │
-│   🖥️  SERVER IP: 10.0.0.156                                                │
-│                                                                             │
-│   ┌─────────────────────────────────────────────────────────────────────┐  │
-│   │  📦 MINIO (Object Storage)                                          │  │
-│   ├─────────────────────────────────────────────────────────────────────┤  │
-│   │  Console:    http://10.0.0.156:9001                                 │  │
-│   │  API:        http://10.0.0.156:9000                                 │  │
-│   │  Username:   rag_flow                                               │  │
-│   │  Password:   infini_rag_flow                                        │  │
-│   │  Bucket:     ocr-results                                            │  │
-│   └─────────────────────────────────────────────────────────────────────┘  │
-│                                                                             │
-│   ┌─────────────────────────────────────────────────────────────────────┐  │
-│   │  🐰 RABBITMQ (Message Queue)                                        │  │
-│   ├─────────────────────────────────────────────────────────────────────┤  │
-│   │  AMQP:       amqp://guest:guest@10.0.0.156:5672/                    │  │
-│   │  Console:    http://10.0.0.156:15672                                │  │
-│   │  Username:   guest                                                  │  │
-│   │  Password:   guest                                                  │  │
-│   │  Queue:      job_finished                                           │  │
-│   └─────────────────────────────────────────────────────────────────────┘  │
-│                                                                             │
-│   ┌─────────────────────────────────────────────────────────────────────┐  │
-│   │  🚀 OCR API                                                         │  │
-│   ├─────────────────────────────────────────────────────────────────────┤  │
-│   │  Endpoint:   http://10.0.0.156:8001                                 │  │
-│   │  Docs:       http://10.0.0.156:8001/docs                            │  │
-│   └─────────────────────────────────────────────────────────────────────┘  │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-### Ví dụ: Tải file từ MinIO (Python)
+## 🎯 Usage Example
 
 ```python
-from minio import Minio
+import requests
 
-client = Minio(
-    "10.0.0.156:9000",
-    access_key="rag_flow",
-    secret_key="infini_rag_flow",
-    secure=False
-)
+# Upload file
+files = {'file': open('document.pdf', 'rb')}
+r = requests.post('http://localhost:8001/ocr/upload', files=files)
+job_id = r.json()['job_id']
 
-# Liệt kê files
-for obj in client.list_objects("ocr-results", recursive=True):
-    print(f"📄 {obj.object_name}")
+# Check status
+r = requests.get(f'http://localhost:8001/ocr/status/{job_id}')
+print(r.json())
 
-# Tải file
-client.fget_object("ocr-results", "job_123/result.md", "./result.md")
+# Get result
+r = requests.get(f'http://localhost:8001/ocr/result/{job_id}')
+markdown = r.json()['markdown']
 ```
 
----
+## 📊 Performance
 
-### Ví dụ: Nhận thông báo qua RabbitMQ (Python)
-
-```python
-import pika
-import json
-
-def callback(ch, method, properties, body):
-    msg = json.loads(body)
-    print(f"✅ Job {msg['job_id']} hoàn thành!")
-    print(f"📁 File: {msg.get('file_path')}")
-
-connection = pika.BlockingConnection(
-    pika.ConnectionParameters(
-        host='10.0.0.156',
-        port=5672,
-        credentials=pika.PlainCredentials('guest', 'guest')
-    )
-)
-channel = connection.channel()
-channel.queue_declare(queue='job_finished', durable=True)
-channel.basic_consume(queue='job_finished', on_message_callback=callback, auto_ack=True)
-
-print("🎧 Đang lắng nghe thông báo...")
-channel.start_consuming()
-```
-
----
-
-## 📚 API Endpoints
-
-| Method | Endpoint | Mô tả |
-|--------|----------|-------|
-| `GET` | `/docs` | Swagger UI Documentation |
-| `GET` | `/health` | Health check |
-| `POST` | `/ocr/upload` | Upload PDF/Image để OCR |
-| `GET` | `/ocr/status/{job_id}` | Kiểm tra trạng thái job |
-| `GET` | `/ocr/result/{job_id}` | Lấy kết quả OCR |
-
----
-
-## 📈 Hiệu suất
-
-| Metric | Giá trị |
-|--------|---------|
-| **Input Speed** | ~500 tokens/s |
-| **Output Speed** | ~760 tokens/s |
-| **GPU Memory** | ~8GB (RTX 3060 12GB) |
-| **Concurrent Jobs** | Unlimited (queue-based) |
-
----
-
-## 🛠 Luồng hoạt động (Workflow)
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                                                                             │
-│   1. INPUT                                                                  │
-│      User upload PDF qua FastAPI                                           │
-│      │                                                                      │
-│      ▼                                                                      │
-│   2. QUEUE                                                                  │
-│      File đưa vào RabbitMQ → Celery Worker nhận task                       │
-│      │                                                                      │
-│      ▼                                                                      │
-│   3. INFERENCE                                                              │
-│      vLLM load ảnh → DeepSeek-OCR trích xuất Text + Tọa độ                │
-│      │                                                                      │
-│      ▼                                                                      │
-│   4. POST-PROCESS                                                           │
-│      Cắt ảnh, sửa tọa độ, chuẩn hóa Markdown                              │
-│      │                                                                      │
-│      ▼                                                                      │
-│   5. OUTPUT                                                                 │
-│      Lưu vào MinIO → Gửi thông báo qua queue "job_finished"               │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
----
+- Input: ~500 tokens/s
+- Output: ~760 tokens/s  
+- GPU Memory: ~8GB
+- Supports: Multiple concurrent jobs (queue-based)
 
 ## 📄 License
 
-MIT License
+MIT
 
----
+## 👨‍💻 Author
 
-## 👥 Tác giả
-
-- **Nguyen Huy Cuong** - *Initial work*
-
----
-
-## 🙏 Acknowledgments
-
-- [DeepSeek-AI](https://github.com/deepseek-ai) - OCR Model
-- [vLLM](https://github.com/vllm-project/vllm) - Inference Engine
-- [MinIO](https://min.io/) - Object Storage
+Nguyen Huy Cuong
