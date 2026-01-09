@@ -28,7 +28,7 @@ class TableBlock(BlockBase):
     type: str = "table"
     table_id: str
     rows: List[List[str]]
-
+#
 # --- 3. Định nghĩa Trang, Metadata và Body ---
 class ContentPage(BaseModel):
     page_number: int
