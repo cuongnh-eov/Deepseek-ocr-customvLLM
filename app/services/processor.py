@@ -15,7 +15,7 @@ def preprocess_batch(images, prompt):
             desc="🚀 Pre-processing images",
             leave=False 
         ))
-    
+    #
     # TÁCH RIÊNG 2 DANH SÁCH TỪ results
     batch_inputs = [r[0] for r in results]   # Đây là cái cũ bạn cần giữ nguyên
     processed_images = [r[1] for r in results] # Đây là cái mới để dùng cho vẽ BBox
