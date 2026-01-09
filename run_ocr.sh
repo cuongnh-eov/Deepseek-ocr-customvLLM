@@ -60,3 +60,4 @@ uvicorn app.main:app --host 0.0.0.0 --port 8001 &
 
 # 4. Khởi chạy Celery Worker
 celery -A app.core.celery_app worker --loglevel=info -P solo --concurrency=1
+#
