@@ -1,30 +1,35 @@
 # docker-compose.services.yml
-version: '3.8'
+# version: '3.8'
 
 services:
   api:
     build: .
     container_name: ocr-api
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8001
+    command: uvicorn app.main:app --host ${API_HOST} --port ${API_PORT}
     ports:
-      - "8001:8001"
+      - "${API_PORT}:${API_PORT}"
     environment:
-      # ✅ SỬA: Dùng container_name từ infra (ocr-postgres, ocr-rabbit, ocr-redis, ocr-minio)
-      - DATABASE_URL=postgresql+psycopg2://ocr_cuong:ocr_cuong@ocr-postgres:5432/ocr_cuong_db
-      - RABBIT_URL=amqp://guest:guest@ocr-rabbit:5672//
-      - REDIS_URL=redis://:infini_rag_flow@ocr-redis:6379/0
-      - MINIO_ENDPOINT=http://ocr-minio:9000
-      - MINIO_ACCESS_KEY=rag_flow
-      - MINIO_SECRET_KEY=infini_rag_flow
-      - MINIO_BUCKET_NAME=ocr-results
-      # ✅ SỬA: Path trong container, không phải path trên host
-      - MODEL_PATH=/models/DeepSeek-OCRR
+      # Database
+      - DATABASE_URL=${DATABASE_URL}
+      # Message Queue
+      - RABBIT_URL=${RABBIT_URL}
+      # Cache
+      - REDIS_URL=${REDIS_URL}
+      # Object Storage
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+      - MINIO_BUCKET_NAME=${MINIO_BUCKET_NAME}
+      # Model
+      - MODEL_PATH=${MODEL_PATH}
     volumes:
       - .:/app
       # Mount model từ host vào container
-      - /home/cuongnh/PycharmProjects/TTTS_01/DeepSeek-OCRR:/models/DeepSeek-OCRR
+      - /home/cuongnh/PycharmProjects/TTTS_01/DeepSeek-OCRR:${MODEL_PATH}
     networks:
       - ocr-network
+    env_file:
+      - .env
     restart: always
 
   worker:
@@ -39,24 +44,30 @@ services:
               count: all
               capabilities: [gpu]
     environment:
-      # ✅ SỬA: Dùng container_name
-      - DATABASE_URL=postgresql+psycopg2://ocr_cuong:ocr_cuong@ocr-postgres:5432/ocr_cuong_db
-      - RABBIT_URL=amqp://guest:guest@ocr-rabbit:5672//
-      - REDIS_URL=redis://:infini_rag_flow@ocr-redis:6379/0
-      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-      - MINIO_ENDPOINT=http://ocr-minio:9000
-      - MINIO_ACCESS_KEY=rag_flow
-      - MINIO_SECRET_KEY=infini_rag_flow
-      - MINIO_BUCKET_NAME=ocr-results
-      # ✅ SỬA: Path trong container
-      - MODEL_PATH=/models/DeepSeek-OCRR
-      - TRITON_PTXAS_PATH=/usr/local/cuda-11.8/bin/ptxas
+      # Database
+      - DATABASE_URL=${DATABASE_URL}
+      # Message Queue
+      - RABBIT_URL=${RABBIT_URL}
+      # Cache
+      - REDIS_URL=${REDIS_URL}
+      # GPU Configuration
+      - PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF}
+      # Object Storage
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+      - MINIO_BUCKET_NAME=${MINIO_BUCKET_NAME}
+      # Model
+      - MODEL_PATH=${MODEL_PATH}
+      - TRITON_PTXAS_PATH=${TRITON_PTXAS_PATH}
     volumes:
       - .:/app
       # Mount model từ host vào container
-      - /home/cuongnh/PycharmProjects/TTTS_01/DeepSeek-OCRR:/models/DeepSeek-OCRR
+      - /home/cuongnh/PycharmProjects/TTTS_01/DeepSeek-OCRR:${MODEL_PATH}
     networks:
       - ocr-network
+    env_file:
+      - .env
     restart: always
 
 networks:
