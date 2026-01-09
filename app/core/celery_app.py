@@ -1,7 +1,7 @@
 from celery import Celery
 from app.config import RABBIT_URL, REDIS_URL
 
-
+#
 celery_app = Celery(
     "ocr_system",
     broker=RABBIT_URL,
