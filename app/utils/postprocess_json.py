@@ -4,7 +4,7 @@ from app.utils.utils import apply_regex_heuristics, validate_financial_rows
 from app.utils.table_continuity_detector import TableContinuityDetector
 
 
-def process_ocr_to_blocks(markdown_text: str, page_number: int = 1) -> List[Dict[str, Any]]:
+def process_ocr_to_blocks(markdown_text: str, page_number: int = 1, job_id: str = None) -> List[Dict[str, Any]]:
     blocks = []
     lines = markdown_text.strip().split('\n')
     
@@ -164,16 +164,24 @@ def process_ocr_to_blocks(markdown_text: str, page_number: int = 1) -> List[Dict
         image_match = re.match(r'^!\[.*?\]\((.*?)\)', line)
         if image_match:
             finalize_markdown_table(); finalize_paragraph()
+            
+            # Transform source path from relative to MinIO path
+            original_source = image_match.group(1).strip()
+            # Convert: ./job_id/images/0.jpg → ocr_results/job_id/images/0.jpg
+            if job_id and original_source.startswith(f'./{job_id}/'):
+                minio_source = original_source.replace(f'./{job_id}/', f'ocr_results/{job_id}/')
+            else:
+                minio_source = original_source
+            
             blocks.append({
                 "type": "image",
-                "source": image_match.group(1).strip(),
+                "source": minio_source,
                 "page_number": page_number,
                 "metadata": {
                     "page_number": page_number,
                     "block_index": len(blocks),
                     "is_continuation": False,
-                    "parent_block_id": None,
-                    "confidence": 1.0
+                    "parent_block_id": None
                 }
             })
             continue

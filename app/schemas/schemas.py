@@ -65,7 +65,7 @@ class DocumentResponseSchema(BaseModel):
                     "metadata": {
                         "source_filename": "sample.pdf",
                         "total_pages": 1,
-                        "processed_at": "2025-11-26T10:00:00Z"
+                        "processed_at": "2026-01-10T16:07:36.781286"
                     },
                     "content": []
                 }

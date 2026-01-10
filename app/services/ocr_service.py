@@ -136,7 +136,7 @@ def process_one_job(job_id: str):
                 
                 # Tính page_number chính xác cho batch này
                 current_page = start + batch_idx + 1
-                blocks = process_ocr_to_blocks(cleaned, page_number=current_page)
+                blocks = process_ocr_to_blocks(cleaned, page_number=current_page, job_id=job_id)
                 all_json_blocks.append(blocks)
 
             # GIẢI PHÓNG BỘ NHỚ SAU MỖI 20 TRANG
@@ -175,7 +175,7 @@ def process_one_job(job_id: str):
                     "job_id": job_id,
                     "source_filename": job.filename,
                     "total_pages": total_pages,
-                    "processed_at": datetime.now(timezone.utc).isoformat(),
+                    "processed_at": datetime.now().isoformat(),
                 },
                 "content": merged_document["document"]["content"],
             }

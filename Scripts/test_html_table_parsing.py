@@ -81,7 +81,7 @@ Normal paragraph text here.
 | Q2 | 60000 |
 """
     
-    blocks = process_ocr_to_blocks(markdown_text, page_number=1)
+    blocks = process_ocr_to_blocks(markdown_text, page_number=1, job_id="test_job")
     
     print(f"\nTotal blocks: {len(blocks)}")
     for i, block in enumerate(blocks):
@@ -137,7 +137,7 @@ Some intro text.
 Some closing text.
 """
     
-    blocks = process_ocr_to_blocks(markdown_with_html_table, page_number=1)
+    blocks = process_ocr_to_blocks(markdown_with_html_table, page_number=1, job_id="test_job")
     
     # Find the table block
     table_blocks = [b for b in blocks if b['type'] == 'table']

@@ -2,6 +2,7 @@ import pika
 import json
 import time
 import logging
+from datetime import datetime
 from app.config import RABBIT_URL
 
 logger = logging.getLogger(__name__)
@@ -23,11 +24,14 @@ def send_finished_notification(job_id: str):
         channel.queue_declare(queue='job_finished', durable=True)
 
         # 3. Tạo nội dung tin nhắn
+        current_date = datetime.now().strftime('%Y/%m/%d')
+        
         message = {
-            "job_id": job_id,
-            "status": "completed",
-            "finished_at": time.strftime('%Y-%m-%d %H:%M:%S'),
-            "timestamp": time.time()
+            "document_id": job_id,
+            "minio_object_name": f"ocr_results/{current_date}/{job_id}.json",
+            "bucket_name": "documents",
+            "file_type": "json",
+            "timestamp": datetime.now().isoformat()
         }
 
         # 4. Publish tin nhắn với chế độ persistent (không mất khi restart RabbitMQ)
