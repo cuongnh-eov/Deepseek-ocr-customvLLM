@@ -32,6 +32,7 @@ from app.utils.postprocess_md import extract_content
 from app.utils.utils import pdf_to_images_high_quality
 from app.utils.postprocess_md import process_ocr_output, upload_to_minio
 from app.utils.postprocess_json import process_ocr_to_blocks
+from app.utils.postprocess_multipage import MultiPageOCRProcessor
 
 # 7. Logic xử lý AI (Inference)
 from app.services.processor import preprocess_batch, generate_ocr
@@ -129,10 +130,13 @@ def process_one_job(job_id: str):
             full_clean_markdown += clean_chunk_md + "\n"
 
             # 5.3) Thu thập blocks cho JSON Merger
-            for output in outputs:
+            for batch_idx, output in enumerate(outputs):
                 raw_text = output.outputs[0].text if hasattr(output, 'outputs') else str(output)
                 cleaned = extract_content(raw_text, job_id)
-                blocks = process_ocr_to_blocks(cleaned)
+                
+                # Tính page_number chính xác cho batch này
+                current_page = start + batch_idx + 1
+                blocks = process_ocr_to_blocks(cleaned, page_number=current_page)
                 all_json_blocks.append(blocks)
 
             # GIẢI PHÓNG BỘ NHỚ SAU MỖI 20 TRANG
@@ -153,19 +157,27 @@ def process_one_job(job_id: str):
         with open(clean_md_path, "w", encoding="utf-8") as f:
             f.write(full_clean_markdown)
 
-        # JSON Merger: Đánh số trang liên tục
-        content_pages = []
-        for page_idx, blocks in enumerate(all_json_blocks):
-            content_pages.append({"page_number": page_idx + 1, "blocks": blocks})
+        # JSON Merger: Multi-page Processing
+        print(f"🔄 Đang xử lý liên trang cho Job {job_id}...")
+        multipage_processor = MultiPageOCRProcessor()
+        
+        # all_json_blocks đã có structured format từ process_ocr_to_blocks
+        merged_document = multipage_processor.process_pages(
+            [
+                {"page_number": idx + 1, "blocks": blocks}
+                for idx, blocks in enumerate(all_json_blocks)
+            ]
+        )
 
         response_data = {
             "document": {
                 "metadata": {
+                    "job_id": job_id,
                     "source_filename": job.filename,
                     "total_pages": total_pages,
                     "processed_at": datetime.now(timezone.utc).isoformat(),
                 },
-                "content": content_pages,
+                "content": merged_document["document"]["content"],
             }
         }
 
