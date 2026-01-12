@@ -129,10 +129,12 @@ def process_one_job(job_id: str):
             full_clean_markdown += clean_chunk_md + "\n"
 
             # 5.3) Thu thập blocks cho JSON Merger
-            for output in outputs:
+            for page_offset, output in enumerate(outputs):
                 raw_text = output.outputs[0].text if hasattr(output, 'outputs') else str(output)
                 cleaned = extract_content(raw_text, job_id)
-                blocks = process_ocr_to_blocks(cleaned)
+                # Tính page_idx chính xác: trang hiện tại trong batch + offset
+                page_idx = start + page_offset
+                blocks = process_ocr_to_blocks(cleaned, page_idx=page_idx)
                 all_json_blocks.append(blocks)
 
             # GIẢI PHÓNG BỘ NHỚ SAU MỖI 20 TRANG
@@ -153,20 +155,29 @@ def process_one_job(job_id: str):
         with open(clean_md_path, "w", encoding="utf-8") as f:
             f.write(full_clean_markdown)
 
-        # JSON Merger: Đánh số trang liên tục
-        content_pages = []
+        # JSON Merger: Đánh số trang liên tục + Fix image paths
+        all_content_list = []
         for page_idx, blocks in enumerate(all_json_blocks):
-            content_pages.append({"page_number": page_idx + 1, "blocks": blocks})
+            # Xử lý lại image paths cho mỗi block (blocks là list of dicts)
+            processed_blocks = []
+            for block in blocks:
+                if block.get("type") == "image" and "img_path" in block:
+                    # Fix image path từ ./job_id/images/X.jpg thành ocr-results/job_id/images/X.jpg
+                    img_path = block["img_path"]
+                    if img_path.startswith("./"):
+                        img_path = img_path[2:]  # Loại bỏ "./"
+                    block["img_path"] = f"ocr-results/{img_path}"
+                processed_blocks.append(block)
+            
+            all_content_list.extend(processed_blocks)
 
         response_data = {
-            "document": {
-                "metadata": {
-                    "source_filename": job.filename,
-                    "total_pages": total_pages,
-                    "processed_at": datetime.now(timezone.utc).isoformat(),
-                },
-                "content": content_pages,
-            }
+            "metadata": {
+                "source_filename": job.filename,
+                "total_pages": total_pages,
+                "processed_at": datetime.now(timezone.utc).isoformat(),
+            },
+            "content": all_content_list
         }
 
         json_path = os.path.join(output_dir, f"{job_id}.json")
