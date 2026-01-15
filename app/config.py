@@ -60,6 +60,25 @@ _IMAGE_TOKEN = "<image>"
 CHUNK_SIZE = 40
 
 # ═══════════════════════════════════════════════════════════════════
+# OCR ENGINE SELECTION
+# ═══════════════════════════════════════════════════════════════════
+# Chọn engine chính: "auto", "deepseek", "mineru", hoặc "docling"
+# 
+# "auto" (mặc định):
+#   - PDF >2MB: MinerU (tốc độ, tóm tắt tốt)
+#   - PDF <2MB: Deepseek (chi tiết, fine-grained)
+#   - Image: Deepseek (OCR optimized)
+#   - Fallback: Docling nếu engine chính bị lỗi
+#
+# Cố định engine: "deepseek", "mineru", "docling"
+#   - Dùng engine cố định cho tất cả files
+#   - Fallback: Docling nếu engine chính bị lỗi
+#
+OCR_ENGINE = os.getenv('OCR_ENGINE', 'auto').lower()
+if OCR_ENGINE not in ['auto', 'deepseek', 'mineru', 'docling']:
+    raise ValueError(f"Invalid OCR_ENGINE: {OCR_ENGINE}. Must be 'auto', 'deepseek', 'mineru', or 'docling'")
+
+# ═══════════════════════════════════════════════════════════════════
 # TOKENIZER INITIALIZATION
 # ═══════════════════════════════════════════════════════════════════
 try:

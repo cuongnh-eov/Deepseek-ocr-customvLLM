@@ -12,7 +12,7 @@ from app.config import MODEL_PATH, INPUT_PATH, OUTPUT_PATH, PROMPT, SKIP_REPEAT,
 
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
-from app.core.ocr_engine import DeepseekOCRForCausalLM
+from app.core.engine.ocr_engine import DeepseekOCRForCausalLM
 
 from vllm.model_executor.models.registry import ModelRegistry
 
@@ -227,7 +227,7 @@ def upload_to_minio(local_directory, job_id):
 
     
 def process_ocr_output(outputs, images, out_path):
-    img_save_dir = os.path.join(out_path, "images")
+    img_save_dir = os.path.join(out_path, "")
     os.makedirs(img_save_dir, exist_ok=True)
     
     contents = ''

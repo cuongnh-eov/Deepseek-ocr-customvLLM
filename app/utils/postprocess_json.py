@@ -36,6 +36,7 @@ def process_ocr_to_blocks(markdown_text: str, page_idx: int = 0) -> List[Dict[st
     current_paragraph = ""
     table_caption = []
     image_caption = []
+    image_counter = 0  # Track image index per page
     
     def finalize_paragraph():
         nonlocal current_paragraph
@@ -137,12 +138,19 @@ def process_ocr_to_blocks(markdown_text: str, page_idx: int = 0) -> List[Dict[st
             finalize_markdown_table()
             finalize_paragraph()
             img_path = image_match.group(1).strip()
+            
+            # Reformat: images/something.png -> images/{page_idx}_{image_counter}.png
+            # Extract file extension
+            ext = img_path.split('.')[-1] if '.' in img_path else 'png'
+            reformatted_path = f"images/{page_idx}_{image_counter}.{ext}"
+            
             content_list.append({
                 "type": "image",
-                "img_path": img_path,
+                "img_path": reformatted_path,
                 "image_caption": image_caption if image_caption else [],
                 "page_idx": page_idx
             })
+            image_counter += 1
             image_caption = []
             continue
 
